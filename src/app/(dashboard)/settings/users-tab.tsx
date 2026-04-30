@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 import { approveUser, deactivateUser, changeUserRole } from '@/app/actions/settings'
 import {
   Table,
@@ -103,9 +104,14 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                       <select
                         defaultValue={u.role}
                         disabled={isPending}
-                        onChange={(e) =>
-                          startTransition(() => changeUserRole(u.id, e.target.value))
-                        }
+                        onChange={(e) => {
+                          const val = e.target.value
+                          startTransition(async () => {
+                            const res = await changeUserRole(u.id, val)
+                            if (res.error) toast.error(res.error)
+                            else toast.success('권한이 변경되었습니다.')
+                          })
+                        }}
                         className="h-7 rounded-md border border-input bg-transparent px-2 text-xs outline-none"
                       >
                         <option value="user">일반</option>
@@ -131,7 +137,11 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           size="sm"
                           variant="default"
                           disabled={isPending}
-                          onClick={() => startTransition(() => approveUser(u.id))}
+                          onClick={() => startTransition(async () => {
+                            const res = await approveUser(u.id)
+                            if (res.error) toast.error(res.error)
+                            else toast.success('승인되었습니다.')
+                          })}
                         >
                           승인
                         </Button>
@@ -141,7 +151,11 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           size="sm"
                           variant="outline"
                           disabled={isPending}
-                          onClick={() => startTransition(() => deactivateUser(u.id))}
+                          onClick={() => startTransition(async () => {
+                            const res = await deactivateUser(u.id)
+                            if (res.error) toast.error(res.error)
+                            else toast.success('비활성화되었습니다.')
+                          })}
                         >
                           비활성화
                         </Button>
@@ -151,7 +165,11 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           size="sm"
                           variant="outline"
                           disabled={isPending}
-                          onClick={() => startTransition(() => approveUser(u.id))}
+                          onClick={() => startTransition(async () => {
+                            const res = await approveUser(u.id)
+                            if (res.error) toast.error(res.error)
+                            else toast.success('재활성화되었습니다.')
+                          })}
                         >
                           재활성화
                         </Button>

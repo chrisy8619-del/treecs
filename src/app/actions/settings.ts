@@ -58,40 +58,49 @@ export async function updatePassword(
   return { error: '', success: true, message: '비밀번호가 변경되었습니다.' }
 }
 
-export async function approveUser(userId: string) {
+export async function approveUser(userId: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
+  if (!user) return { error: '인증이 필요합니다.' }
 
   const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!me || !['admin', 'superadmin'].includes(me.role)) return
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-  await supabase.from('profiles').update({ status: 'active' }).eq('id', userId)
+  const { error } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId)
+  if (error) return { error: `승인 실패: ${error.message}` }
+
   revalidatePath('/settings')
+  return {}
 }
 
-export async function deactivateUser(userId: string) {
+export async function deactivateUser(userId: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
+  if (!user) return { error: '인증이 필요합니다.' }
 
   const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!me || !['admin', 'superadmin'].includes(me.role)) return
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-  await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId)
+  const { error } = await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId)
+  if (error) return { error: `비활성화 실패: ${error.message}` }
+
   revalidatePath('/settings')
+  return {}
 }
 
-export async function changeUserRole(userId: string, role: string) {
+export async function changeUserRole(userId: string, role: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
+  if (!user) return { error: '인증이 필요합니다.' }
 
   const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (me?.role !== 'superadmin') return
+  if (me?.role !== 'superadmin') return { error: '권한이 없습니다.' }
 
-  await supabase.from('profiles').update({ role }).eq('id', userId)
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
+  if (error) return { error: `권한 변경 실패: ${error.message}` }
+
   revalidatePath('/settings')
+  return {}
 }
 
 export async function saveUploadLog(log: {
