@@ -108,6 +108,7 @@ export function AddItemDialog({ roundId, siteId, plantingRecords }: Props) {
                   name="contractor_id"
                   placeholder="시공사 ID"
                   required
+                  autoComplete="off"
                 />
               </div>
               <div className="space-y-2">
@@ -117,6 +118,7 @@ export function AddItemDialog({ roundId, siteId, plantingRecords }: Props) {
                   name="species_id"
                   placeholder="수종 ID"
                   required
+                  autoComplete="off"
                 />
               </div>
               <div className="space-y-2">
@@ -126,6 +128,7 @@ export function AddItemDialog({ roundId, siteId, plantingRecords }: Props) {
                   name="spec_code_id"
                   placeholder="규격 ID"
                   required
+                  autoComplete="off"
                 />
               </div>
             </>
@@ -150,6 +153,7 @@ export function AddItemDialog({ roundId, siteId, plantingRecords }: Props) {
                 min={0}
                 defaultValue={selectedRecord?.quantity_planted ?? 0}
                 required
+                autoComplete="off"
               />
             </div>
             <div className="space-y-2">
@@ -160,13 +164,14 @@ export function AddItemDialog({ roundId, siteId, plantingRecords }: Props) {
                 type="number"
                 min={0}
                 defaultValue={0}
+                autoComplete="off"
               />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="notes">비고</Label>
-            <Input id="notes" name="notes" placeholder="메모" />
+            <Input id="notes" name="notes" placeholder="메모" autoComplete="off" />
           </div>
 
           {state.error && (

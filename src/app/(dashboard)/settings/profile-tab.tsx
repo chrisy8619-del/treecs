@@ -24,15 +24,15 @@ export function ProfileTab({ profile }: { profile: Profile }) {
       </div>
       <div className="space-y-2">
         <Label htmlFor="name">이름 *</Label>
-        <Input id="name" name="name" defaultValue={profile.name ?? ''} required />
+        <Input id="name" name="name" defaultValue={profile.name ?? ''} required autoComplete="name" />
       </div>
       <div className="space-y-2">
         <Label htmlFor="department">부서</Label>
-        <Input id="department" name="department" defaultValue={profile.department ?? ''} placeholder="예: 조경관리팀" />
+        <Input id="department" name="department" defaultValue={profile.department ?? ''} placeholder="예: 조경관리팀" autoComplete="off" />
       </div>
       <div className="space-y-2">
         <Label htmlFor="phone">연락처</Label>
-        <Input id="phone" name="phone" defaultValue={profile.phone ?? ''} placeholder="010-0000-0000" />
+        <Input id="phone" name="phone" defaultValue={profile.phone ?? ''} placeholder="010-0000-0000" autoComplete="tel" />
       </div>
 
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}

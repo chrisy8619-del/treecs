@@ -62,22 +62,22 @@ export function CreateContractorDialog({ organizations }: { organizations: Organ
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="contractor_name">시공사명 *</Label>
-              <Input id="contractor_name" name="contractor_name" placeholder="예: (주)그린조경" required />
+              <Input id="contractor_name" name="contractor_name" autoComplete="off" placeholder="예: (주)그린조경" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="contractor_code">시공사코드 *</Label>
-              <Input id="contractor_code" name="contractor_code" placeholder="예: GC-001" required />
+              <Input id="contractor_code" name="contractor_code" autoComplete="off" placeholder="예: GC-001" required />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="contact_name">담당자명</Label>
-              <Input id="contact_name" name="contact_name" placeholder="예: 홍길동" />
+              <Input id="contact_name" name="contact_name" autoComplete="off" placeholder="예: 홍길동" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="contact_phone">연락처</Label>
-              <Input id="contact_phone" name="contact_phone" placeholder="예: 010-0000-0000" />
+              <Input id="contact_phone" name="contact_phone" autoComplete="off" placeholder="예: 010-0000-0000" />
             </div>
           </div>
 

@@ -50,22 +50,22 @@ export function CreateSpeciesDialog({ groups }: { groups: SpeciesGroup[] }) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="species_name_ko">수종명(한글) *</Label>
-              <Input id="species_name_ko" name="species_name_ko" placeholder="예: 소나무" required />
+              <Input id="species_name_ko" name="species_name_ko" autoComplete="off" placeholder="예: 소나무" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="species_code">수종코드 *</Label>
-              <Input id="species_code" name="species_code" placeholder="예: PINE-001" required />
+              <Input id="species_code" name="species_code" autoComplete="off" placeholder="예: PINE-001" required />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="species_name_en">수종명(영문)</Label>
-              <Input id="species_name_en" name="species_name_en" placeholder="예: Pine" />
+              <Input id="species_name_en" name="species_name_en" autoComplete="off" placeholder="예: Pine" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="scientific_name">학명</Label>
-              <Input id="scientific_name" name="scientific_name" placeholder="예: Pinus densiflora" />
+              <Input id="scientific_name" name="scientific_name" autoComplete="off" placeholder="예: Pinus densiflora" />
             </div>
           </div>
 

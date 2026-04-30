@@ -117,22 +117,23 @@ export function CreatePlantingDialog({ sites, contractors, species, specCodes }:
                 min={1}
                 placeholder="0"
                 required
+                autoComplete="off"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="planting_date">식재일</Label>
-              <Input id="planting_date" name="planting_date" type="date" />
+              <Input id="planting_date" name="planting_date" type="date" autoComplete="off" />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="occupancy_basis_date">준공 기산일</Label>
-            <Input id="occupancy_basis_date" name="occupancy_basis_date" type="date" />
+            <Input id="occupancy_basis_date" name="occupancy_basis_date" type="date" autoComplete="off" />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="notes">비고</Label>
-            <Input id="notes" name="notes" placeholder="메모" />
+            <Input id="notes" name="notes" placeholder="메모" autoComplete="off" />
           </div>
 
           {state.error && (

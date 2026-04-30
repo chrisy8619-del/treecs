@@ -62,42 +62,42 @@ export function CreateSiteDialog({ organizations }: { organizations: Organizatio
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="site_name">현장명 *</Label>
-              <Input id="site_name" name="site_name" placeholder="예: 한강공원 조경공사" required />
+              <Input id="site_name" name="site_name" autoComplete="off" placeholder="예: 한강공원 조경공사" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="site_code">현장코드 *</Label>
-              <Input id="site_code" name="site_code" placeholder="예: SITE-001" required />
+              <Input id="site_code" name="site_code" autoComplete="off" placeholder="예: SITE-001" required />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="region">지역</Label>
-              <Input id="region" name="region" placeholder="예: 서울" />
+              <Input id="region" name="region" autoComplete="off" placeholder="예: 서울" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="project_type">공사 유형</Label>
-              <Input id="project_type" name="project_type" placeholder="예: 아파트 조경" />
+              <Input id="project_type" name="project_type" autoComplete="off" placeholder="예: 아파트 조경" />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="address">주소</Label>
-            <Input id="address" name="address" placeholder="예: 서울시 영등포구 여의도동" />
+            <Input id="address" name="address" autoComplete="off" placeholder="예: 서울시 영등포구 여의도동" />
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="start_date">착공일</Label>
-              <Input id="start_date" name="start_date" type="date" />
+              <Input id="start_date" name="start_date" autoComplete="off" type="date" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="end_date">준공예정일</Label>
-              <Input id="end_date" name="end_date" type="date" />
+              <Input id="end_date" name="end_date" autoComplete="off" type="date" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="occupancy_date">준공일</Label>
-              <Input id="occupancy_date" name="occupancy_date" type="date" />
+              <Input id="occupancy_date" name="occupancy_date" autoComplete="off" type="date" />
             </div>
           </div>
 

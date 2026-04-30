@@ -63,12 +63,12 @@ export function CreateInspectionDialog({ sites }: { sites: Site[] }) {
 
           <div className="space-y-2">
             <Label htmlFor="inspection_date">점검일자 *</Label>
-            <Input id="inspection_date" name="inspection_date" type="date" required />
+            <Input id="inspection_date" name="inspection_date" type="date" required autoComplete="off" />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="inspection_name">점검명</Label>
-            <Input id="inspection_name" name="inspection_name" placeholder="예: 2024년 봄철 점검" />
+            <Input id="inspection_name" name="inspection_name" placeholder="예: 2024년 봄철 점검" autoComplete="off" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -104,12 +104,12 @@ export function CreateInspectionDialog({ sites }: { sites: Site[] }) {
 
           <div className="space-y-2">
             <Label htmlFor="performed_by">점검자</Label>
-            <Input id="performed_by" name="performed_by" placeholder="점검자 이름" />
+            <Input id="performed_by" name="performed_by" placeholder="점검자 이름" autoComplete="off" />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="notes">비고</Label>
-            <Input id="notes" name="notes" placeholder="메모" />
+            <Input id="notes" name="notes" placeholder="메모" autoComplete="off" />
           </div>
 
           {state.error && (

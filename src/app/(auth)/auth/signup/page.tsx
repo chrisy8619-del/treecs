@@ -22,7 +22,7 @@ export default function SignupPage() {
           <form action={action} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">이름 *</Label>
-              <Input id="name" name="name" placeholder="홍길동" required />
+              <Input id="name" name="name" placeholder="홍길동" required autoComplete="name" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">이메일 *</Label>
@@ -30,11 +30,11 @@ export default function SignupPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="department">부서 *</Label>
-              <Input id="department" name="department" placeholder="예: 조경관리팀" required />
+              <Input id="department" name="department" placeholder="예: 조경관리팀" required autoComplete="organization-title" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">연락처</Label>
-              <Input id="phone" name="phone" placeholder="010-0000-0000" />
+              <Input id="phone" name="phone" placeholder="010-0000-0000" autoComplete="tel" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">비밀번호 * (8자 이상)</Label>
