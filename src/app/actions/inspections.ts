@@ -55,8 +55,17 @@ export async function createInspectionRound(
   return { error: '', success: true }
 }
 
-export async function deleteInspectionRound(id: string) {
+export async function deleteInspectionRound(id: string): Promise<{ error?: string }> {
   const supabase = await createClient()
-  await supabase.from('inspection_rounds').delete().eq('id', id)
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
+
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+
+  const { error } = await supabase.from('inspection_rounds').delete().eq('id', id)
+  if (error) return { error: `삭제 실패: ${error.message}` }
+
   revalidatePath('/inspections')
+  return {}
 }

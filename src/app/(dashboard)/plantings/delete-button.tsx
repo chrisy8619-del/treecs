@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { deleteInspectionRound } from '@/app/actions/inspections'
+import { Button } from '@/components/ui/button'
+import { deletePlantingRecord } from '@/app/actions/plantings'
 
-export function InspectionDeleteButton({ id }: { id: string }) {
+export function PlantingDeleteButton({ id }: { id: string }) {
   const [confirm, setConfirm] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -16,7 +16,7 @@ export function InspectionDeleteButton({ id }: { id: string }) {
         <span className="text-xs text-muted-foreground whitespace-nowrap">정말 삭제?</span>
         <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" disabled={isPending}
           onClick={() => startTransition(async () => {
-            const res = await deleteInspectionRound(id)
+            const res = await deletePlantingRecord(id)
             if (res?.error) toast.error(res.error)
             setConfirm(false)
           })}>

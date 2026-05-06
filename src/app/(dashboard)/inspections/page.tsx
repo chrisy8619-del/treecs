@@ -54,7 +54,7 @@ export default async function InspectionsPage() {
       .order('site_name'),
     supabase.from('profiles').select('role').eq('id', user.id).single(),
   ])
-  const isSuperadmin = profile?.role === 'superadmin'
+  const isAdmin = ['admin', 'superadmin'].includes(profile?.role ?? '')
 
   return (
     <div className="space-y-6">
@@ -117,7 +117,7 @@ export default async function InspectionsPage() {
                       <TableCell>{round.performed_by ?? '-'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          {isSuperadmin && <InspectionDeleteButton id={round.id} />}
+                          {isAdmin && <InspectionDeleteButton id={round.id} />}
                           <Link
                             href={`/inspections/${round.id}`}
                             className="flex items-center justify-center text-muted-foreground hover:text-foreground"

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { CreatePlantingDialog } from './create-planting-dialog'
+import { PlantingDeleteButton } from './delete-button'
 import {
   Table,
   TableBody,
@@ -22,6 +23,7 @@ export default async function PlantingsPage() {
     { data: contractors },
     { data: species },
     { data: specCodes },
+    { data: profile },
   ] = await Promise.all([
     supabase
       .from('planting_records')
@@ -40,7 +42,9 @@ export default async function PlantingsPage() {
     supabase.from('contractors').select('id, contractor_name, contractor_code').eq('is_active', true).order('contractor_name'),
     supabase.from('species').select('id, species_name_ko, species_code').eq('is_active', true).order('species_name_ko'),
     supabase.from('spec_codes').select('id, spec_label_raw').order('spec_label_raw'),
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
   ])
+  const isAdmin = ['admin', 'superadmin'].includes(profile?.role ?? '')
 
   return (
     <div className="space-y-6">
@@ -78,6 +82,7 @@ export default async function PlantingsPage() {
                   <TableHead className="text-right">수량 (주)</TableHead>
                   <TableHead>식재일</TableHead>
                   <TableHead>준공 기산일</TableHead>
+                  {isAdmin && <TableHead className="w-8" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -102,6 +107,11 @@ export default async function PlantingsPage() {
                       </TableCell>
                       <TableCell>{rec.planting_date ?? '-'}</TableCell>
                       <TableCell>{rec.occupancy_basis_date ?? '-'}</TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          <PlantingDeleteButton id={rec.id} />
+                        </TableCell>
+                      )}
                     </TableRow>
                   )
                 })}

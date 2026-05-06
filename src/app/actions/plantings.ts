@@ -59,3 +59,18 @@ export async function createPlantingRecord(
   revalidatePath('/plantings')
   return { error: '', success: true }
 }
+
+export async function deletePlantingRecord(id: string): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
+
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+
+  const { error } = await supabase.from('planting_records').delete().eq('id', id)
+  if (error) return { error: `삭제 실패: ${error.message}` }
+
+  revalidatePath('/plantings')
+  return {}
+}
