@@ -114,6 +114,11 @@ function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
       if (!isNaN(n)) defectRate = n
     }
 
+    // K열=예상하자수량, L열=예상예비비, M열=리스크등급, N열=권장조치, P열=비고
+    const excelDefectQty = getCellVal(`K${r}`)
+    const excelReserveCost = getCellVal(`L${r}`)
+    const excelRiskLevel = getCellVal(`M${r}`)
+
     const row: DefectAnalysisRow = {
       현장코드: headerInfo.site_code,
       현장명: headerInfo.site_name,
@@ -129,6 +134,9 @@ function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
       근원직경R: getCellVal(`H${r}`) != null ? Number(getCellVal(`H${r}`)) : undefined,
       단가: getCellVal(`I${r}`) != null ? Number(getCellVal(`I${r}`)) : undefined,
       예상하자율: defectRate,
+      예상하자수량: excelDefectQty != null ? Number(excelDefectQty) : undefined,
+      예상예비비: excelReserveCost != null ? Number(excelReserveCost) : undefined,
+      리스크등급: excelRiskLevel != null ? String(excelRiskLevel) : undefined,
       비고: getCellVal(`P${r}`) != null ? String(getCellVal(`P${r}`)) : undefined,
     }
     rows.push(row)
@@ -139,6 +147,9 @@ function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
       수관폭W: row.수관폭W ?? null,
       단가: row.단가 ?? null,
       예상하자율: defectRate != null ? `${(defectRate > 1 ? defectRate : defectRate * 100).toFixed(2)}%` : null,
+      예상하자수량: excelDefectQty != null ? Number(excelDefectQty) : null,
+      예상예비비: excelReserveCost != null ? `₩${Number(excelReserveCost).toLocaleString()}` : null,
+      리스크등급: excelRiskLevel != null ? String(excelRiskLevel) : null,
       비고: row.비고 ?? null,
     })
   }
@@ -186,7 +197,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
         const sheet = workbook.Sheets[sheetName]
         const { headerInfo, rows, rawRows } = parseDefectAnalysisExcel(sheet)
 
-        const headers = ['수종명', '수량', '수고H', '수관폭W', '단가', '예상하자율', '비고']
+        const headers = ['수종명', '수량', '수고H', '수관폭W', '단가', '예상하자율', '예상하자수량', '예상예비비', '리스크등급', '비고']
         setPreview({
           headers,
           rows: rawRows.slice(0, 5),

@@ -4,26 +4,25 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { generateSampleAnalysisData } from '@/app/actions/upload'
 import { FlaskConical, CheckCircle2, XCircle } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 
 export function SampleDataButton() {
   const [isPending, startTransition] = useTransition()
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
-  const router = useRouter()
 
   function handleGenerate() {
     startTransition(async () => {
       const res = await generateSampleAnalysisData()
       if (res.success) {
         setStatus('success')
-        setMessage(`샘플 데이터 ${res.successCount}건 생성 완료`)
-        router.refresh()
+        setMessage(`샘플 데이터 ${res.successCount}건 생성 완료 — 페이지를 새로고침합니다`)
+        // 서버 컴포넌트 데이터 즉시 반영
+        setTimeout(() => window.location.reload(), 800)
       } else {
         setStatus('error')
         setMessage(res.errors[0] ?? '생성 실패')
+        setTimeout(() => setStatus('idle'), 4000)
       }
-      setTimeout(() => setStatus('idle'), 4000)
     })
   }
 

@@ -362,65 +362,117 @@ export default async function AnalyticsPage() {
             </div>
           )}
 
-          {/* 차트 2열 */}
+          {/* 상단 차트 2열: 연도별 + 계절별 */}
+          {(yearlyData.length > 0 || seasonData.length > 0) && (
+            <div className="grid gap-6 md:grid-cols-2">
+              {yearlyData.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">연도별 하자율 추이</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <YearlyDefectChart data={yearlyData} />
+                  </CardContent>
+                </Card>
+              )}
+              {seasonData.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      계절별 하자율
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">식재시기 기준</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <SeasonDefectChart data={seasonData} />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* 중단 차트 2열: 시공사별 + 수종별 */}
+          {(contractorData.length > 0 || speciesData.length > 0) && (
+            <div className="grid gap-6 md:grid-cols-2">
+              {contractorData.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">시공사별 하자율</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ContractorDefectChart data={contractorData} />
+                  </CardContent>
+                </Card>
+              )}
+              {speciesData.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">수종별 하자율 <span className="text-sm font-normal text-muted-foreground">(상위 15종)</span></CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <SpeciesDefectChart data={speciesData} />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* 하단 차트 2열: 수종별 하자율 옆에 현장별 예비비 — 항상 같은 행 */}
           <div className="grid gap-6 md:grid-cols-2">
-            {yearlyData.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">연도별 하자율 추이</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <YearlyDefectChart data={yearlyData} />
-                </CardContent>
-              </Card>
-            )}
-            {seasonData.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    계절별 하자율
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">식재시기 기준</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <SeasonDefectChart data={seasonData} />
-                </CardContent>
-              </Card>
-            )}
-            {contractorData.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">시공사별 하자율</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ContractorDefectChart data={contractorData} />
-                </CardContent>
-              </Card>
-            )}
-            {speciesData.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">수종별 하자율 <span className="text-sm font-normal text-muted-foreground">(상위 15종)</span></CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <SpeciesDefectChart data={speciesData} />
-                </CardContent>
-              </Card>
-            )}
-            {/* 현장별 예상 예비비 — 수종별 하자율 옆에 위치 */}
-            {siteReserveData.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    현장별 예상 예비비
-                    <span className="ml-2 text-sm font-normal text-muted-foreground">상위 10개 현장</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+            {/* 왼쪽: 빈 자리 or 추가 차트 자리 (현재는 예비비가 오른쪽 전용) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  현장별 예상 예비비
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">상위 10개 현장</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {siteReserveData.length > 0 ? (
                   <SiteReserveCostChart data={siteReserveData} />
-                </CardContent>
-              </Card>
-            )}
+                ) : (
+                  <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
+                    하자율 예측 분석 데이터를 업로드하면 표시됩니다.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            {/* 오른쪽: 현장별 하자율 요약 미니 카드 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  현장별 리스크 현황
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">총 {siteReserveData.length}개 현장</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {siteReserveData.length > 0 ? (
+                  <div className="divide-y max-h-[280px] overflow-y-auto">
+                    {siteReserveData.slice(0, 8).map((site, i) => (
+                      <div key={i} className="flex items-center justify-between px-6 py-2.5 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-muted-foreground w-5 text-right shrink-0">{i + 1}</span>
+                          <span className="font-medium truncate">{site.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 ml-2">
+                          <span className={`font-semibold ${site.defect_rate >= 0.20 ? 'text-red-500' : site.defect_rate >= 0.10 ? 'text-yellow-500' : 'text-green-600'}`}>
+                            {(site.defect_rate * 100).toFixed(1)}%
+                          </span>
+                          <span className="text-orange-600 text-xs">₩{(site.reserve_cost / 1000000).toFixed(1)}M</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${site.defect_rate >= 0.20 ? 'bg-red-100 text-red-700' : site.defect_rate >= 0.10 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                            {site.defect_rate >= 0.20 ? '고위험' : site.defect_rate >= 0.10 ? '중위험' : '저위험'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
+                    데이터가 없습니다.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* 현장별 하자율 + 예비비 테이블 */}

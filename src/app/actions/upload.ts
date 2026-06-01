@@ -53,7 +53,10 @@ export type DefectAnalysisRow = {
   흉고직경B?: number
   근원직경R?: number
   단가?: number
-  예상하자율?: number   // 0~100 사이 정수 or 0~1 소수 둘 다 허용
+  예상하자율?: number     // 0~100 사이 정수 or 0~1 소수 둘 다 허용
+  예상하자수량?: number   // 엑셀 K열 수식 결과값 (없으면 서버에서 재계산)
+  예상예비비?: number     // 엑셀 L열 수식 결과값 (없으면 DB 트리거가 계산)
+  리스크등급?: string     // 엑셀 M열 값 (없으면 DB 트리거가 계산)
   비고?: string
 }
 
@@ -691,7 +694,13 @@ export async function uploadDefectAnalysis(
 
     const unit_price = row.단가 ? Number(row.단가) : null
 
-    const { error } = await supabase.from('planting_records').insert({
+    // 엑셀 수식 결과값 (K/L/M열) — 있으면 직접 저장, 없으면 DB 트리거가 계산
+    const excelDefectQty = row.예상하자수량 != null ? Math.round(Number(row.예상하자수량)) : null
+    const excelReserveCost = row.예상예비비 != null ? Math.round(Number(row.예상예비비)) : null
+    const excelRiskLevel = row.리스크등급 ? String(row.리스크등급).replace(/[☑□✓×]/g, '').trim() : null
+    const validRisk = ['고위험', '중위험', '저위험'].includes(excelRiskLevel ?? '') ? excelRiskLevel : null
+
+    const insertData: Record<string, unknown> = {
       organization_id: site.organization_id,
       site_id: site.id,
       contractor_id: contractor_id!,
@@ -703,7 +712,13 @@ export async function uploadDefectAnalysis(
       expected_defect_rate: defect_rate,
       source_type: 'excel_import',
       notes: row.비고 ? String(row.비고).trim() : null,
-    })
+    }
+    // 엑셀에 계산 결과가 있으면 함께 저장 (트리거보다 우선 적용)
+    if (excelDefectQty != null) insertData.expected_defect_qty = excelDefectQty
+    if (excelReserveCost != null) insertData.expected_reserve_cost = excelReserveCost
+    if (validRisk) insertData.risk_level = validRisk
+
+    const { error } = await supabase.from('planting_records').insert(insertData)
 
     if (error) {
       errors.push(`${rowNum}행 (${species_name}): ${error.message}`)
