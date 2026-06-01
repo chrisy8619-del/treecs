@@ -365,9 +365,15 @@ export async function generateSampleAnalysisData(): Promise<UploadResult> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, totalRows: 0, successCount: 0, failCount: 0, errors: ['인증이 필요합니다.'] }
 
-  const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single()
-  const org_id = profile?.organization_id
-  if (!org_id) return { success: false, totalRows: 0, successCount: 0, failCount: 0, errors: ['조직 정보를 찾을 수 없습니다.'] }
+  // organization_id: profiles 우선, 없으면 organizations 첫 번째 조직 사용
+  const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).maybeSingle()
+  let org_id = profile?.organization_id
+
+  if (!org_id) {
+    const { data: orgs } = await supabase.from('organizations').select('id').limit(1).maybeSingle()
+    org_id = orgs?.id
+  }
+  if (!org_id) return { success: false, totalRows: 0, successCount: 0, failCount: 0, errors: ['조직 정보를 찾을 수 없습니다. 먼저 조직을 등록하세요.'] }
 
   const SAMPLE_SITES = [
     { site_code: 'SAMPLE_C01', site_name: '만촌자이르네', region: '대구' },

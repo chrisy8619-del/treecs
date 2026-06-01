@@ -15,13 +15,12 @@ export function SampleDataButton() {
       const res = await generateSampleAnalysisData()
       if (res.success) {
         setStatus('success')
-        setMessage(`샘플 데이터 ${res.successCount}건 생성 완료 — 페이지를 새로고침합니다`)
-        // 서버 컴포넌트 데이터 즉시 반영
-        setTimeout(() => window.location.reload(), 800)
+        setMessage(`샘플 데이터 ${res.successCount}건 생성 완료${res.failCount > 0 ? ` (${res.failCount}건 실패)` : ''} — 새로고침`)
+        setTimeout(() => window.location.reload(), 1000)
       } else {
         setStatus('error')
-        setMessage(res.errors[0] ?? '생성 실패')
-        setTimeout(() => setStatus('idle'), 4000)
+        setMessage(res.errors.join(' / ') || '생성 실패')
+        setTimeout(() => setStatus('idle'), 8000)
       }
     })
   }
