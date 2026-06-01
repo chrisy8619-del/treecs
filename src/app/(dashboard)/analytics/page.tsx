@@ -9,6 +9,7 @@ import {
   SiteReserveCostChart,
   type SiteReserveData,
 } from './charts'
+import { SampleDataButton } from './sample-data-button'
 import {
   Table,
   TableBody,
@@ -270,9 +271,12 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">분석</h2>
-        <p className="text-muted-foreground">하자율 통계 및 리스크 분석 현황입니다.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">분석</h2>
+          <p className="text-muted-foreground">하자율 통계 및 리스크 분석 현황입니다.</p>
+        </div>
+        <SampleDataButton />
       </div>
 
       {!hasData ? (
@@ -403,22 +407,21 @@ export default async function AnalyticsPage() {
                 </CardContent>
               </Card>
             )}
+            {/* 현장별 예상 예비비 — 수종별 하자율 옆에 위치 */}
+            {siteReserveData.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    현장별 예상 예비비
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">상위 10개 현장</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SiteReserveCostChart data={siteReserveData} />
+                </CardContent>
+              </Card>
+            )}
           </div>
-
-          {/* 현장별 예상 예비비 차트 */}
-          {siteReserveData.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  현장별 예상 예비비
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">상위 10개 현장</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SiteReserveCostChart data={siteReserveData} />
-              </CardContent>
-            </Card>
-          )}
 
           {/* 현장별 하자율 + 예비비 테이블 */}
           {(siteData.length > 0 || siteReserveData.length > 0) && (

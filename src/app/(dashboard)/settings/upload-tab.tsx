@@ -245,16 +245,42 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
 
   function downloadTemplate() {
     if (uploadType === 'defect_analysis') {
-      // 하자율 예측 분석 템플릿: 헤더 정보 + 수목 명세 형태
-      const headerRows = [
+      // 하자율 예측 분석 템플릿 — 이미지 기준 열 구성 반영
+      const aoa = [
+        // 행 1 (현장 기본 정보 제목 행 — 병합 표현은 xlsx에서 생략)
+        ['현장 기본 정보'],
+        // 행 2 (row index 1)
         ['현장코드', '', '준공일', '', '', '', '시공사', '', '협력사', ''],
-        ['현장명', '', '식재시기', '', '', '', '지역', '', '', ''],
+        // 행 3 (row index 2)
+        ['현장명', '', '식재시기', '', '', '', '지역', '', '총 수량', '예상 하자율', '총 예비비'],
+        // 행 4 (row index 3)
+        ['비고'],
+        // 행 5 — 빈 행
         [],
-        ['번호', '수종명', '수량', '수고H(m)', '수관폭W(m)', '흉고직경B(cm)', '근원직경R(cm)', '단가(원)', '예상하자율(%)', '비고'],
+        // 행 6 — 리스크 판정 소계행 (빈 행으로 처리)
+        [],
+        // 행 7 — 전체 리스크 판정 헤더
+        ['전체 리스크 판정', '', '', '', '중위험 - 주의 관리 필요'],
+        // 행 8 — 고위험/중위험/지위험 카운트 (설명용)
+        ['고위험:0종', '', '중위험:0종', '', '지위험:0종', '', '단가 자동매칭:0건'],
+        // 행 9 (row index 8) — 열 헤더 (row 12 위치에 맞추기 위해 빈 행 추가)
+        [],
+        [],
+        [],
+        // 행 12 (row index 11) — 실제 열 헤더
+        ['번호', '수종명', '수량', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)', '단가(자동,W)', '예상하자율', '예상 하자수량', '예상 예비비(W)', '리스크 등급', '권장 조치', '세부 조치(필요시 입력)', '비고'],
+        // 행 13~ — 샘플 데이터 1행
+        [1, '수종명 입력', 100, 2.0, 1.5, '', 8, 55000, '10%', '=ROUND(C13*I13,0)', '=H13*J13', '=IF(I13>=0.2,"고위험",IF(I13>=0.1,"중위험","저위험"))', '모니터링', '', ''],
       ]
-      const ws = XLSX.utils.aoa_to_sheet(headerRows)
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      // 열 너비 설정
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 10 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+        { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 },
+      ]
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '하자율예측분석')
+      XLSX.utils.book_append_sheet(wb, ws, '신규현장_하자율 예측분석')
       XLSX.writeFile(wb, '하자율예측분석_양식.xlsx')
     } else {
       const ws = XLSX.utils.aoa_to_sheet([selectedType.columns])
