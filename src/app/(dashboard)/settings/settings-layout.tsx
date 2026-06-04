@@ -5,6 +5,7 @@ import { ProfileTab } from './profile-tab'
 import { PasswordTab } from './password-tab'
 import { UsersTab } from './users-tab'
 import { UploadTab } from './upload-tab'
+import { SiteApprovalTab, type PendingSite } from './site-approval-tab'
 import { Badge } from '@/components/ui/badge'
 import {
   UserIcon,
@@ -12,6 +13,7 @@ import {
   UsersIcon,
   UploadIcon,
   SettingsIcon,
+  MapPin,
 } from 'lucide-react'
 
 type Profile = {
@@ -46,19 +48,21 @@ type Props = {
   users: UserProfile[]
   uploadLogs: UploadLog[]
   pendingCount: number
+  pendingSites: PendingSite[]
 }
 
-type TabId = 'profile' | 'password' | 'users' | 'upload' | 'system'
+type TabId = 'profile' | 'password' | 'users' | 'upload' | 'site-approval' | 'system'
 
-export function SettingsLayout({ profile, users, uploadLogs, pendingCount }: Props) {
+export function SettingsLayout({ profile, users, uploadLogs, pendingCount, pendingSites }: Props) {
   const isAdmin = ['admin', 'superadmin'].includes(profile.role)
   const isSuperAdmin = profile.role === 'superadmin'
 
-  const tabs: { id: TabId; label: string; icon: React.ReactNode; show: boolean }[] = [
+  const tabs: { id: TabId; label: string; icon: React.ReactNode; show: boolean; badge?: number }[] = [
     { id: 'profile', label: '내 정보', icon: <UserIcon className="h-4 w-4" />, show: true },
     { id: 'password', label: '비밀번호 변경', icon: <LockIcon className="h-4 w-4" />, show: true },
-    { id: 'users', label: '사용자 관리', icon: <UsersIcon className="h-4 w-4" />, show: isAdmin },
+    { id: 'users', label: '사용자 관리', icon: <UsersIcon className="h-4 w-4" />, show: isAdmin, badge: pendingCount },
     { id: 'upload', label: '엑셀 업로드', icon: <UploadIcon className="h-4 w-4" />, show: isAdmin },
+    { id: 'site-approval', label: '현장 승인', icon: <MapPin className="h-4 w-4" />, show: isAdmin, badge: pendingSites.length },
     { id: 'system', label: '시스템 설정', icon: <SettingsIcon className="h-4 w-4" />, show: isSuperAdmin },
   ]
 
@@ -81,7 +85,7 @@ export function SettingsLayout({ profile, users, uploadLogs, pendingCount }: Pro
           >
             {tab.icon}
             <span className="flex-1 text-left">{tab.label}</span>
-            {tab.id === 'users' && pendingCount > 0 && (
+            {tab.badge != null && tab.badge > 0 && (
               <Badge
                 className={`h-5 px-1.5 text-xs ${
                   activeTab === tab.id
@@ -89,7 +93,7 @@ export function SettingsLayout({ profile, users, uploadLogs, pendingCount }: Pro
                     : ''
                 }`}
               >
-                {pendingCount}
+                {tab.badge}
               </Badge>
             )}
           </button>
@@ -105,6 +109,9 @@ export function SettingsLayout({ profile, users, uploadLogs, pendingCount }: Pro
         )}
         {activeTab === 'upload' && isAdmin && (
           <UploadTab logs={uploadLogs} />
+        )}
+        {activeTab === 'site-approval' && isAdmin && (
+          <SiteApprovalTab sites={pendingSites} />
         )}
         {activeTab === 'system' && isSuperAdmin && (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">

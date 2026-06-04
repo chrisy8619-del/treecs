@@ -7,10 +7,11 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // 현장 목록
+  // 현장 목록 — 승인된(active/closed) 현장만 표시, pending은 설정>현장승인 탭에서 처리
   const { data: sitesRaw } = await supabase
     .from('sites')
     .select('id, site_name, site_code, region, occupancy_date, start_date, organizations(name)')
+    .in('status', ['active', 'closed'])
     .order('created_at', { ascending: false })
 
   const sites: SiteOption[] = (sitesRaw ?? []).map((s) => {

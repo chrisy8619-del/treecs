@@ -103,6 +103,42 @@ export async function changeUserRole(userId: string, role: string): Promise<{ er
   return {}
 }
 
+export async function approveSite(siteId: string): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
+
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+
+  const { error } = await supabase.from('sites').update({ status: 'active' }).eq('id', siteId)
+  if (error) return { error: `승인 실패: ${error.message}` }
+
+  revalidatePath('/settings')
+  revalidatePath('/dashboard')
+  revalidatePath('/sites')
+  return {}
+}
+
+export async function rejectSite(siteId: string): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
+
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+
+  // 반려 시 해당 현장의 planting_records도 함께 삭제
+  await supabase.from('planting_records').delete().eq('site_id', siteId)
+  const { error } = await supabase.from('sites').delete().eq('id', siteId)
+  if (error) return { error: `반려 실패: ${error.message}` }
+
+  revalidatePath('/settings')
+  revalidatePath('/dashboard')
+  revalidatePath('/sites')
+  return {}
+}
+
 export async function saveUploadLog(log: {
   file_name: string
   upload_type: string

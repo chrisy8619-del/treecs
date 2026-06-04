@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SettingsLayout } from './settings-layout'
+import type { PendingSite } from './site-approval-tab'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -23,7 +24,7 @@ export default async function SettingsPage() {
 
   const isAdmin = ['admin', 'superadmin'].includes(safeProfile.role)
 
-  const [usersResult, logsResult] = await Promise.all([
+  const [usersResult, logsResult, pendingSitesResult] = await Promise.all([
     isAdmin
       ? supabase
           .from('profiles')
@@ -37,11 +38,45 @@ export default async function SettingsPage() {
           .order('created_at', { ascending: false })
           .limit(50)
       : Promise.resolve({ data: [] }),
+    isAdmin
+      ? supabase
+          .from('sites')
+          .select('id, site_name, site_code, region, occupancy_date, start_date, created_at')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] }),
   ])
 
   const users = usersResult.data ?? []
   const uploadLogs = logsResult.data ?? []
-  const pendingCount = users.filter((u) => u.status === 'pending').length
+  const pendingUserCount = users.filter((u) => u.status === 'pending').length
+
+  // 현장별 planting_records 수 집계
+  const rawPendingSites = pendingSitesResult.data ?? []
+  let pendingSites: PendingSite[] = []
+  if (rawPendingSites.length > 0) {
+    const siteIds = rawPendingSites.map((s) => s.id)
+    const { data: plantingCounts } = await supabase
+      .from('planting_records')
+      .select('site_id')
+      .in('site_id', siteIds)
+
+    const countMap = new Map<string, number>()
+    for (const p of plantingCounts ?? []) {
+      countMap.set(p.site_id, (countMap.get(p.site_id) ?? 0) + 1)
+    }
+
+    pendingSites = rawPendingSites.map((s) => ({
+      id: s.id,
+      site_name: s.site_name,
+      site_code: s.site_code,
+      region: s.region ?? null,
+      occupancy_date: s.occupancy_date ?? null,
+      start_date: s.start_date ?? null,
+      created_at: s.created_at,
+      planting_count: countMap.get(s.id) ?? 0,
+    }))
+  }
 
   return (
     <div className="space-y-6">
@@ -54,7 +89,8 @@ export default async function SettingsPage() {
         profile={safeProfile}
         users={users}
         uploadLogs={uploadLogs}
-        pendingCount={pendingCount}
+        pendingCount={pendingUserCount}
+        pendingSites={pendingSites}
       />
     </div>
   )

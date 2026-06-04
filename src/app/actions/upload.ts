@@ -572,22 +572,56 @@ export async function uploadDefectAnalysis(
   const errors: string[] = []
   let successCount = 0
 
-  // 현장 조회
-  const { data: site } = await supabase
+  // organization_id 확인 (profiles → organizations 첫 번째)
+  const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).maybeSingle()
+  let org_id = profile?.organization_id
+  if (!org_id) {
+    const { data: orgs } = await supabase.from('organizations').select('id').limit(1).maybeSingle()
+    org_id = orgs?.id
+  }
+  if (!org_id) {
+    return { success: false, totalRows: rows.length, successCount: 0, failCount: rows.length, errors: ['조직 정보를 찾을 수 없습니다.'] }
+  }
+
+  // 현장 조회 → 없으면 승인 대기(pending) 상태로 자동 생성
+  let { data: site } = await supabase
     .from('sites')
-    .select('id, organization_id, site_name')
+    .select('id, organization_id, site_name, status')
     .eq('site_code', headerInfo.site_code.trim())
+    .eq('organization_id', org_id)
     .maybeSingle()
 
   if (!site) {
-    return {
-      success: false,
-      totalRows: rows.length,
-      successCount: 0,
-      failCount: rows.length,
-      errors: [`현장코드 '${headerInfo.site_code}'를 찾을 수 없습니다. 먼저 현장을 등록하세요.`],
+    const completionDate = excelDateToString(headerInfo.completion_date)
+    const plantingDate = excelDateToString(headerInfo.planting_date)
+    const { data: newSite, error: siteErr } = await supabase
+      .from('sites')
+      .insert({
+        organization_id: org_id,
+        site_code: headerInfo.site_code.trim(),
+        site_name: headerInfo.site_name.trim() || headerInfo.site_code.trim(),
+        region: headerInfo.region.trim() || null,
+        occupancy_date: completionDate || null,
+        start_date: plantingDate || null,
+        status: 'pending',
+      })
+      .select('id, organization_id, site_name, status')
+      .single()
+
+    if (siteErr || !newSite) {
+      return {
+        success: false,
+        totalRows: rows.length,
+        successCount: 0,
+        failCount: rows.length,
+        errors: [`현장 자동 생성 실패: ${siteErr?.message ?? '알 수 없는 오류'}`],
+      }
     }
+    site = newSite
   }
+
+  // 승인 대기 현장이면 데이터는 저장하되 결과에 안내 메시지 포함
+  const isPendingSite = site.status === 'pending'
 
   // 시공사 조회 (이름으로)
   const { data: contractorList } = await supabase
@@ -745,13 +779,18 @@ export async function uploadDefectAnalysis(
   revalidatePath('/analytics')
   revalidatePath('/plantings')
   revalidatePath('/settings')
+  revalidatePath('/dashboard')
+
+  const pendingNote = isPendingSite
+    ? [`현장 '${site.site_name}'이 승인 대기 상태로 등록되었습니다. 관리자 승인 후 대시보드에 표시됩니다.`]
+    : []
 
   return {
     success: successCount > 0,
     totalRows: rows.length,
     successCount,
     failCount: errors.length,
-    errors: errors.slice(0, 20),
+    errors: [...pendingNote, ...errors.slice(0, 20)],
   }
 }
 
