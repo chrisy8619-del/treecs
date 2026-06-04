@@ -632,14 +632,15 @@ export async function uploadDefectAnalysis(
   const contractorNameMap = new Map(contractorList?.map((c) => [c.contractor_name, c.id]) ?? [])
   let contractor_id = contractorNameMap.get(headerInfo.contractor_name.trim())
 
-  // 시공사 없으면 자동 생성
-  if (!contractor_id && headerInfo.contractor_name.trim()) {
+  // 시공사 없으면 자동 생성 (이름이 있을 때), 없으면 "미지정" 시공사 조회/생성
+  if (!contractor_id) {
+    const contractorName = headerInfo.contractor_name.trim() || '미지정'
     const code = `AUTO_${Date.now()}`
     const { data: newC } = await supabase
       .from('contractors')
       .insert({
         organization_id: site.organization_id,
-        contractor_name: headerInfo.contractor_name.trim(),
+        contractor_name: contractorName,
         contractor_code: code,
       })
       .select('id')
@@ -648,7 +649,13 @@ export async function uploadDefectAnalysis(
   }
 
   if (!contractor_id) {
-    errors.push('시공사를 찾거나 생성할 수 없습니다.')
+    return {
+      success: false,
+      totalRows: rows.length,
+      successCount: 0,
+      failCount: rows.length,
+      errors: ['시공사를 생성할 수 없습니다. 관리자에게 문의하세요.'],
+    }
   }
 
   // 수종 목록 로드
