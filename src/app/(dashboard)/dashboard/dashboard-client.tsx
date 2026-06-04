@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useTransition } from 'react'
+import * as XLSX from 'xlsx'
 import {
   Table,
   TableBody,
@@ -9,9 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { RefreshCw, Upload, TrendingUp, Coins, TreePine, Leaf, Target, Search } from 'lucide-react'
+import {
+  RefreshCw, Upload, TrendingUp, Coins, TreePine, Leaf,
+  Target, Search, FileDown, ChevronLeft, ChevronRight,
+} from 'lucide-react'
+import { uploadDefectAnalysis, type DefectAnalysisRow } from '@/app/actions/upload'
 
-// ─── 타입 ───────────────────────────────────────────────
+// ─── 타입 ────────────────────────────────────────────────
 export type SiteOption = {
   id: string
   site_name: string
@@ -45,7 +50,9 @@ type Props = {
   allPlantings: PlantingRow[]
 }
 
-// ─── 헬퍼 ───────────────────────────────────────────────
+type RiskFilter = 'all' | '고위험' | '중위험' | '저위험'
+
+// ─── 헬퍼 ────────────────────────────────────────────────
 function riskConfig(rate: number | null) {
   if (rate === null) return { label: '-', color: 'text-gray-400', dot: 'bg-gray-300', badge: 'bg-gray-100 text-gray-600' }
   if (rate >= 0.20) return { label: '고위험', color: 'text-red-600', dot: 'bg-red-500', badge: 'bg-red-100 text-red-700' }
@@ -67,24 +74,161 @@ function recommendedAction(rate: number | null): string {
   return '유지 관리'
 }
 
-// ─── 컴포넌트 ────────────────────────────────────────────
+// 엑셀 셀값 읽기
+function getCellVal(sheet: XLSX.WorkSheet, addr: string) {
+  const cell = sheet[addr]
+  return cell ? cell.v : null
+}
+
+// 하자율 예측 분석 시트 파싱
+function parseDefectSheet(sheet: XLSX.WorkSheet): {
+  headerInfo: { site_code: string; site_name: string; completion_date: unknown; planting_date: unknown; contractor_name: string; region: string }
+  rows: DefectAnalysisRow[]
+} {
+  const headerInfo = {
+    site_code: String(getCellVal(sheet, 'C6') ?? '').trim(),
+    site_name: String(getCellVal(sheet, 'C7') ?? '').trim(),
+    completion_date: getCellVal(sheet, 'E6'),
+    planting_date: getCellVal(sheet, 'E7'),
+    contractor_name: String(getCellVal(sheet, 'I6') ?? '').trim(),
+    region: String(getCellVal(sheet, 'I7') ?? '').trim(),
+  }
+
+  const rows: DefectAnalysisRow[] = []
+  for (let r = 13; r <= 62; r++) {
+    const speciesName = getCellVal(sheet, `C${r}`)
+    if (!speciesName || String(speciesName).trim() === '') break
+
+    const rawRate = getCellVal(sheet, `J${r}`)
+    let defectRate: number | undefined
+    if (rawRate != null) {
+      const n = Number(rawRate)
+      if (!isNaN(n)) defectRate = n
+    }
+
+    rows.push({
+      현장코드: headerInfo.site_code,
+      현장명: headerInfo.site_name,
+      준공일: headerInfo.completion_date as string | number | undefined,
+      식재시기: headerInfo.planting_date as string | number | undefined,
+      시공사: headerInfo.contractor_name,
+      지역: headerInfo.region,
+      수종명: String(speciesName).trim(),
+      수량: getCellVal(sheet, `D${r}`) != null ? Number(getCellVal(sheet, `D${r}`)) : undefined,
+      수고H: getCellVal(sheet, `E${r}`) != null ? Number(getCellVal(sheet, `E${r}`)) : undefined,
+      수관폭W: getCellVal(sheet, `F${r}`) != null ? Number(getCellVal(sheet, `F${r}`)) : undefined,
+      흉고직경B: getCellVal(sheet, `G${r}`) != null ? Number(getCellVal(sheet, `G${r}`)) : undefined,
+      근원직경R: getCellVal(sheet, `H${r}`) != null ? Number(getCellVal(sheet, `H${r}`)) : undefined,
+      단가: getCellVal(sheet, `I${r}`) != null ? Number(getCellVal(sheet, `I${r}`)) : undefined,
+      예상하자율: defectRate,
+      예상하자수량: getCellVal(sheet, `K${r}`) != null ? Number(getCellVal(sheet, `K${r}`)) : undefined,
+      예상예비비: getCellVal(sheet, `L${r}`) != null ? Number(getCellVal(sheet, `L${r}`)) : undefined,
+      리스크등급: getCellVal(sheet, `M${r}`) != null ? String(getCellVal(sheet, `M${r}`)) : undefined,
+      비고: getCellVal(sheet, `P${r}`) != null ? String(getCellVal(sheet, `P${r}`)) : undefined,
+    })
+  }
+
+  return { headerInfo, rows }
+}
+
+// 엑셀 양식 생성 (현장 데이터 포함)
+function buildTemplateWorkbook(site: SiteOption | null, rows: PlantingRow[]) {
+  const wb = XLSX.utils.book_new()
+
+  // 현장 기본 정보
+  const siteName = site?.site_name ?? ''
+  const siteCode = site?.site_code ?? ''
+  const region = site?.region ?? ''
+  const occupancy = site?.occupancy_date ?? ''
+  const startDate = site?.start_date ?? ''
+
+  const aoa: unknown[][] = [
+    ['현장 기본 정보'],
+    ['현장코드', '', siteCode, '', '준공일', occupancy, '', '', '시공사', ''],
+    ['현장명', '', siteName, '', '식재시기', startDate, '', '', '지역', region],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    // 행 12: 헤더
+    ['번호', '수종명', '수량', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)',
+      '단가(자동,W)', '예상하자율', '예상 하자수량', '예상 예비비(W)', '리스크 등급', '권장 조치', '세부 조치(필요시 입력)', '비고'],
+  ]
+
+  // 데이터 행 (13번째 행부터, index 12)
+  rows.forEach((row, idx) => {
+    const r = 13 + idx
+    aoa.push([
+      idx + 1,
+      row.species_name ?? '',
+      row.quantity_planted,
+      row.height_m ?? '',
+      row.width_m ?? '',
+      row.caliper ?? '',
+      row.rootball_r ?? '',
+      row.unit_price ?? '',
+      row.expected_defect_rate != null ? row.expected_defect_rate : '',
+      { f: `ROUND(C${r}*I${r},0)` },
+      { f: `H${r}*J${r}` },
+      { f: `IF(I${r}>=0.2,"고위험",IF(I${r}>=0.1,"중위험","저위험"))` },
+      recommendedAction(row.expected_defect_rate),
+      '',
+      row.notes ?? '',
+    ])
+  })
+
+  // 데이터 없으면 빈 샘플 1행
+  if (rows.length === 0) {
+    aoa.push([1, '수종명 입력', 100, 2.0, 1.5, '', 8, 55000, 0.1052,
+      { f: 'ROUND(C13*I13,0)' }, { f: 'H13*J13' },
+      { f: 'IF(I13>=0.2,"고위험",IF(I13>=0.1,"중위험","저위험"))' },
+      '모니터링 강화', '', ''])
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!cols'] = [
+    { wch: 6 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 10 },
+    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+    { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 },
+  ]
+  XLSX.utils.book_append_sheet(wb, ws, '신규현장_하자율 예측분석')
+  return wb
+}
+
+// ─── 컴포넌트 ─────────────────────────────────────────────
 export function DashboardClient({ sites, allPlantings }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isPending, startTransition] = useTransition()
+
+  // 현장 선택
   const [selectedSiteId, setSelectedSiteId] = useState<string>(sites[0]?.id ?? '')
   const [codeInput, setCodeInput] = useState(sites[0]?.site_code ?? '')
   const [nameInput, setNameInput] = useState(sites[0]?.site_name ?? '')
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false)
   const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
 
+  // 필터 / 페이지네이션
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
+  const [pageSize, setPageSize] = useState(10)
+  const [page, setPage] = useState(1)
+
+  // 엑셀 업로드 상태
+  const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+
   // 선택된 현장
   const site = useMemo(() => sites.find((s) => s.id === selectedSiteId) ?? sites[0] ?? null, [sites, selectedSiteId])
 
-  // 현장에 해당하는 수목 데이터
-  const rows = useMemo(
+  // 현장 수목 전체
+  const siteRows = useMemo(
     () => allPlantings.filter((r) => r.site_id === (site?.id ?? '')),
     [allPlantings, site]
   )
 
-  // 코드 입력 필터링
+  // 드롭다운 필터
   const codeMatches = useMemo(
     () => sites.filter((s) => s.site_code.toLowerCase().includes(codeInput.toLowerCase())).slice(0, 10),
     [sites, codeInput]
@@ -100,27 +244,104 @@ export function DashboardClient({ sites, allPlantings }: Props) {
     setNameInput(s.site_name)
     setCodeDropdownOpen(false)
     setNameDropdownOpen(false)
+    setPage(1)
+    setRiskFilter('all')
   }
 
-  // 집계값
-  const totalQty = rows.reduce((s, r) => s + r.quantity_planted, 0)
-  const totalDefectQty = rows.reduce((s, r) => s + (r.expected_defect_qty ?? 0), 0)
-  const totalReserve = rows.reduce((s, r) => s + (Number(r.expected_reserve_cost) ?? 0), 0)
+  // 리스크 필터 적용
+  const filteredRows = useMemo(() => {
+    if (riskFilter === 'all') return siteRows
+    return siteRows.filter((r) => r.risk_level === riskFilter)
+  }, [siteRows, riskFilter])
 
-  const qtyWithRate = rows.reduce((s, r) => r.expected_defect_rate != null ? s + r.quantity_planted : s, 0)
-  const weightedSum = rows.reduce((s, r) => r.expected_defect_rate != null ? s + r.expected_defect_rate * r.quantity_planted : s, 0)
+  // 페이지네이션
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const pagedRows = useMemo(
+    () => filteredRows.slice((page - 1) * pageSize, page * pageSize),
+    [filteredRows, page, pageSize]
+  )
+
+  // 필터/페이지 변경 시 page 리셋
+  function handleRiskFilter(f: RiskFilter) {
+    setRiskFilter(f)
+    setPage(1)
+  }
+  function handlePageSize(n: number) {
+    setPageSize(n)
+    setPage(1)
+  }
+
+  // 집계 (필터 적용 전 전체 기준)
+  const totalQty = siteRows.reduce((s, r) => s + r.quantity_planted, 0)
+  const totalDefectQty = siteRows.reduce((s, r) => s + (r.expected_defect_qty ?? 0), 0)
+  const totalReserve = siteRows.reduce((s, r) => s + (Number(r.expected_reserve_cost) ?? 0), 0)
+  const qtyWithRate = siteRows.reduce((s, r) => r.expected_defect_rate != null ? s + r.quantity_planted : s, 0)
+  const weightedSum = siteRows.reduce((s, r) => r.expected_defect_rate != null ? s + r.expected_defect_rate * r.quantity_planted : s, 0)
   const avgRate = qtyWithRate > 0 ? weightedSum / qtyWithRate : null
-
   const riskCounts = { high: 0, mid: 0, low: 0 }
-  for (const r of rows) {
+  for (const r of siteRows) {
     if (r.risk_level === '고위험') riskCounts.high++
     else if (r.risk_level === '중위험') riskCounts.mid++
     else if (r.risk_level === '저위험') riskCounts.low++
   }
-  const unitMatchCount = rows.filter((r) => r.unit_price != null).length
+  const unitMatchCount = siteRows.filter((r) => r.unit_price != null).length
   const overall = overallRisk(avgRate)
   const avgRatePct = avgRate !== null ? (avgRate * 100).toFixed(2) + '%' : '-'
   const totalReserveStr = totalReserve > 0 ? '₩' + totalReserve.toLocaleString() : '-'
+
+  // ── 엑셀 양식 다운로드 ──
+  function handleDownloadTemplate() {
+    const wb = buildTemplateWorkbook(site, siteRows)
+    const fileName = site ? `하자율예측_${site.site_code}_양식.xlsx` : '하자율예측분석_양식.xlsx'
+    XLSX.writeFile(wb, fileName)
+  }
+
+  // ── 엑셀 업로드 ──
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      setUploadStatus({ type: 'error', msg: '.xlsx 또는 .xls 파일만 지원합니다.' })
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const data = new Uint8Array(ev.target?.result as ArrayBuffer)
+      const workbook = XLSX.read(data, { type: 'array' })
+      const sheetName =
+        workbook.SheetNames.find((n) => n.includes('하자율') || n.includes('예측')) ??
+        workbook.SheetNames[0]
+      const sheet = workbook.Sheets[sheetName]
+      const { headerInfo, rows } = parseDefectSheet(sheet)
+
+      if (!headerInfo.site_code) {
+        setUploadStatus({ type: 'error', msg: '현장코드(C6)를 찾을 수 없습니다. 양식을 확인하세요.' })
+        return
+      }
+      if (rows.length === 0) {
+        setUploadStatus({ type: 'error', msg: '수목 데이터가 없습니다. 13행부터 데이터를 입력하세요.' })
+        return
+      }
+
+      startTransition(async () => {
+        const res = await uploadDefectAnalysis(
+          headerInfo as Parameters<typeof uploadDefectAnalysis>[0],
+          rows
+        )
+        if (res.success) {
+          setUploadStatus({ type: 'success', msg: `${res.successCount}건 업로드 완료${res.failCount > 0 ? ` (${res.failCount}건 실패)` : ''} — 새로고침 중...` })
+          setTimeout(() => window.location.reload(), 1200)
+        } else {
+          setUploadStatus({ type: 'error', msg: res.errors[0] ?? '업로드 실패' })
+        }
+      })
+    }
+    reader.readAsArrayBuffer(file)
+    // input 초기화
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   return (
     <div className="space-y-0 -m-6">
       {/* ── 상단 헤더 ── */}
@@ -132,7 +353,10 @@ export function DashboardClient({ sites, allPlantings }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors">
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors"
+          >
             <Upload className="h-3.5 w-3.5" />
             파일내보내기
           </button>
@@ -151,12 +375,10 @@ export function DashboardClient({ sites, allPlantings }: Props) {
         <div>
           <h2 className="text-sm font-semibold text-gray-700 mb-2">현장 기본 정보</h2>
           <div className="flex gap-4">
-            {/* 좌측: 현장 정보 테이블 */}
             <div className="flex-1 border rounded-lg overflow-visible bg-white">
               <table className="w-full text-sm">
                 <tbody>
                   <tr className="border-b">
-                    {/* 현장코드 — 입력 가능 */}
                     <td className="px-4 py-2.5 bg-gray-100 font-medium text-gray-500 w-24 text-xs">현장코드</td>
                     <td className="px-3 py-1.5 relative" colSpan={3}>
                       <div className="relative">
@@ -173,11 +395,8 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                         {codeDropdownOpen && codeMatches.length > 0 && (
                           <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                             {codeMatches.map((s) => (
-                              <button
-                                key={s.id}
-                                onMouseDown={() => selectSite(s)}
-                                className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 flex items-center gap-2"
-                              >
+                              <button key={s.id} onMouseDown={() => selectSite(s)}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 flex items-center gap-2">
                                 <span className="font-mono text-gray-500 w-20 shrink-0">{s.site_code}</span>
                                 <span className="text-gray-800">{s.site_name}</span>
                               </button>
@@ -188,7 +407,6 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                     </td>
                   </tr>
                   <tr className="border-b">
-                    {/* 현장명 — 입력 가능 */}
                     <td className="px-4 py-2.5 bg-gray-100 font-medium text-gray-500 text-xs">현장명</td>
                     <td className="px-3 py-1.5 relative" colSpan={3}>
                       <div className="relative">
@@ -205,11 +423,8 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                         {nameDropdownOpen && nameMatches.length > 0 && (
                           <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                             {nameMatches.map((s) => (
-                              <button
-                                key={s.id}
-                                onMouseDown={() => selectSite(s)}
-                                className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 flex items-center gap-2"
-                              >
+                              <button key={s.id} onMouseDown={() => selectSite(s)}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 flex items-center gap-2">
                                 <span className="text-gray-800 font-medium">{s.site_name}</span>
                                 <span className="font-mono text-gray-400">{s.site_code}</span>
                               </button>
@@ -237,7 +452,7 @@ export function DashboardClient({ sites, allPlantings }: Props) {
               </table>
             </div>
 
-            {/* 우측: KPI 카드 */}
+            {/* KPI 카드 */}
             <div className="flex gap-3">
               <div className="border rounded-lg bg-white px-5 py-4 flex items-center gap-4 min-w-[170px]">
                 <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
@@ -262,26 +477,33 @@ export function DashboardClient({ sites, allPlantings }: Props) {
           </div>
         </div>
 
-        {/* ── 툴바 ── */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-sm flex-wrap">
+        {/* ── 툴바 (리스크 필터 포함) ── */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-gray-600 font-medium text-xs">전체 리스크 판정</span>
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${overall.bg}`}>
               {overall.icon} {overall.label}
             </span>
-            {overall.label === '중위험' && (
-              <span className="text-xs text-gray-500">※ 중위험 · 주의 관리 필요</span>
+            {overall.label !== '-' && overall.label !== '저위험' && (
+              <span className="text-xs text-gray-500">※ {overall.label} · 주의 관리 필요</span>
             )}
             <span className="mx-1 text-gray-200">|</span>
-            <span className="flex items-center gap-1 text-xs text-red-600">
-              <span className="inline-block w-2 h-2 rounded-full bg-red-500" /> 고위험 {riskCounts.high}종
-            </span>
-            <span className="flex items-center gap-1 text-xs text-yellow-600">
-              <span className="inline-block w-2 h-2 rounded-full bg-yellow-400" /> 중위험 {riskCounts.mid}종
-            </span>
-            <span className="flex items-center gap-1 text-xs text-green-600">
-              <span className="inline-block w-2 h-2 rounded-full bg-green-500" /> 저위험 {riskCounts.low}종
-            </span>
+            {/* 리스크 필터 버튼 */}
+            {([
+              { key: 'all', label: '전체', count: siteRows.length, active: 'bg-gray-800 text-white', inactive: 'border text-gray-600 hover:bg-gray-50' },
+              { key: '고위험', label: '고위험', count: riskCounts.high, active: 'bg-red-500 text-white', inactive: 'border border-red-200 text-red-600 hover:bg-red-50', dot: 'bg-red-500' },
+              { key: '중위험', label: '중위험', count: riskCounts.mid, active: 'bg-yellow-400 text-white', inactive: 'border border-yellow-200 text-yellow-600 hover:bg-yellow-50', dot: 'bg-yellow-400' },
+              { key: '저위험', label: '저위험', count: riskCounts.low, active: 'bg-green-500 text-white', inactive: 'border border-green-200 text-green-600 hover:bg-green-50', dot: 'bg-green-500' },
+            ] as const).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => handleRiskFilter(f.key as RiskFilter)}
+                className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full transition-colors ${riskFilter === f.key ? f.active : f.inactive}`}
+              >
+                {'dot' in f && <span className={`inline-block w-1.5 h-1.5 rounded-full ${riskFilter === f.key ? 'bg-white' : f.dot}`} />}
+                {f.label} {f.count}종
+              </button>
+            ))}
             <span className="mx-1 text-gray-200">|</span>
             <span className="text-xs text-gray-500">단가 자동매칭 {unitMatchCount}건</span>
           </div>
@@ -289,21 +511,51 @@ export function DashboardClient({ sites, allPlantings }: Props) {
             <button className="flex items-center gap-1.5 bg-[#1a3a2a] hover:bg-[#2a5a3e] text-white text-xs px-3 py-1.5 rounded transition-colors">
               + 수목 추가
             </button>
-            <button className="flex items-center gap-1.5 border text-gray-700 hover:bg-gray-50 text-xs px-3 py-1.5 rounded transition-colors">
-              📄 엑셀 가져오기
-            </button>
+            {/* 엑셀 가져오기 */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isPending}
+                className="flex items-center gap-1.5 border text-gray-700 hover:bg-gray-50 text-xs px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+              >
+                📄 {isPending ? '업로드 중...' : '엑셀 가져오기'}
+              </button>
+              <button
+                onClick={handleDownloadTemplate}
+                title="현재 현장 데이터 기반 양식 다운로드"
+                className="flex items-center gap-1 border text-gray-600 hover:bg-gray-50 text-xs px-2 py-1.5 rounded transition-colors"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                양식
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleFileChange}
+            />
             <button className="flex items-center gap-1.5 border text-gray-700 hover:bg-gray-50 text-xs px-3 py-1.5 rounded transition-colors">
               ⚙ 항목 설정
             </button>
           </div>
         </div>
 
+        {/* 업로드 결과 메시지 */}
+        {uploadStatus && (
+          <div className={`rounded-lg px-4 py-2.5 text-xs flex items-center justify-between ${uploadStatus.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+            <span>{uploadStatus.msg}</span>
+            <button onClick={() => setUploadStatus(null)} className="ml-4 text-gray-400 hover:text-gray-600">✕</button>
+          </div>
+        )}
+
         {/* ── 수목 테이블 ── */}
         <div className="border rounded-lg overflow-hidden bg-white">
           {sites.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-gray-400 text-sm">
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400 text-sm gap-2">
               <p>현장 데이터가 없습니다.</p>
-              <p className="text-xs mt-1">설정 → 업로드에서 하자율 예측 분석 엑셀을 업로드하세요.</p>
+              <p className="text-xs">우측 상단 &apos;엑셀 가져오기&apos; 또는 &apos;양식&apos; 버튼으로 데이터를 업로드하세요.</p>
             </div>
           ) : (
             <>
@@ -330,24 +582,24 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.length === 0 ? (
+                  {pagedRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={15} className="text-center py-12 text-gray-400 text-sm">
-                        이 현장에 수목 데이터가 없습니다.
+                        {riskFilter !== 'all' ? `${riskFilter} 수목이 없습니다.` : '이 현장에 수목 데이터가 없습니다.'}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rows.map((row, idx) => {
+                    pagedRows.map((row, idx) => {
+                      const globalIdx = (page - 1) * pageSize + idx
                       const risk = riskConfig(row.expected_defect_rate)
                       const ratePct = row.expected_defect_rate !== null
-                        ? (row.expected_defect_rate * 100).toFixed(2) + '%'
-                        : '-'
+                        ? (row.expected_defect_rate * 100).toFixed(2) + '%' : '-'
                       const unitPrice = row.unit_price != null ? '₩' + Number(row.unit_price).toLocaleString() : '-'
                       const reserveCost = row.expected_reserve_cost != null ? '₩' + Number(row.expected_reserve_cost).toLocaleString() : '-'
 
                       return (
                         <TableRow key={row.id} className={idx % 2 === 1 ? 'bg-gray-50' : ''}>
-                          <TableCell className="text-center text-xs text-gray-500 py-2.5">{idx + 1}</TableCell>
+                          <TableCell className="text-center text-xs text-gray-500 py-2.5">{globalIdx + 1}</TableCell>
                           <TableCell className="text-xs font-medium text-gray-900 py-2.5">{row.species_name ?? '-'}</TableCell>
                           <TableCell className="text-xs text-right text-gray-900 py-2.5">{row.quantity_planted.toLocaleString()}</TableCell>
                           <TableCell className="text-xs text-center text-gray-700 py-2.5">{row.height_m ?? ''}</TableCell>
@@ -356,13 +608,9 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                           <TableCell className="text-xs text-center text-gray-700 py-2.5">{row.rootball_r ?? ''}</TableCell>
                           <TableCell className="text-xs text-right text-gray-900 py-2.5">{unitPrice}</TableCell>
                           <TableCell className="text-xs text-right py-2.5">
-                            <span className={row.expected_defect_rate !== null ? risk.color : 'text-gray-400'}>
-                              {ratePct}
-                            </span>
+                            <span className={row.expected_defect_rate !== null ? risk.color : 'text-gray-400'}>{ratePct}</span>
                           </TableCell>
-                          <TableCell className="text-xs text-right text-gray-900 py-2.5">
-                            {row.expected_defect_qty ?? '-'}
-                          </TableCell>
+                          <TableCell className="text-xs text-right text-gray-900 py-2.5">{row.expected_defect_qty ?? '-'}</TableCell>
                           <TableCell className="text-xs text-right text-gray-900 py-2.5">{reserveCost}</TableCell>
                           <TableCell className="text-xs text-center py-2.5">
                             {row.expected_defect_rate !== null ? (
@@ -370,13 +618,9 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                                 <span className={`inline-block w-1.5 h-1.5 rounded-full ${risk.dot}`} />
                                 {risk.label}
                               </span>
-                            ) : (
-                              <span className="text-gray-300">-</span>
-                            )}
+                            ) : <span className="text-gray-300">-</span>}
                           </TableCell>
-                          <TableCell className="text-xs text-gray-600 py-2.5">
-                            {recommendedAction(row.expected_defect_rate)}
-                          </TableCell>
+                          <TableCell className="text-xs text-gray-600 py-2.5">{recommendedAction(row.expected_defect_rate)}</TableCell>
                           <TableCell className="text-xs text-gray-400 py-2.5">{row.notes ?? ''}</TableCell>
                           <TableCell className="text-xs text-gray-400 py-2.5"></TableCell>
                         </TableRow>
@@ -385,12 +629,66 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                   )}
                 </TableBody>
               </Table>
-              {rows.length > 0 && (
-                <div className="px-4 py-2 border-t flex items-center justify-between text-xs text-gray-500 bg-gray-50">
-                  <span>전체 {rows.length}건</span>
-                  <span>10 / 페이지</span>
+
+              {/* 페이지네이션 */}
+              <div className="px-4 py-2 border-t flex items-center justify-between text-xs text-gray-500 bg-gray-50">
+                <span>
+                  전체 {filteredRows.length}건
+                  {riskFilter !== 'all' && <span className="ml-1 text-gray-400">(필터: {riskFilter})</span>}
+                </span>
+                <div className="flex items-center gap-3">
+                  {/* 페이지당 건수 */}
+                  <div className="flex items-center gap-1">
+                    {[10, 20, 50].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => handlePageSize(n)}
+                        className={`px-2 py-0.5 rounded text-xs transition-colors ${pageSize === n ? 'bg-gray-700 text-white' : 'hover:bg-gray-200 text-gray-600'}`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                    <span className="ml-1 text-gray-400">/ 페이지</span>
+                  </div>
+                  {/* 페이지 이동 */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                      .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                        if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('...')
+                        acc.push(p)
+                        return acc
+                      }, [])
+                      .map((p, i) =>
+                        p === '...' ? (
+                          <span key={`ellipsis-${i}`} className="px-1">…</span>
+                        ) : (
+                          <button
+                            key={p}
+                            onClick={() => setPage(p as number)}
+                            className={`w-6 h-6 rounded text-xs transition-colors ${page === p ? 'bg-[#1a3a2a] text-white' : 'hover:bg-gray-200'}`}
+                          >
+                            {p}
+                          </button>
+                        )
+                      )}
+                    <button
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-              )}
+              </div>
             </>
           )}
         </div>
@@ -403,35 +701,26 @@ export function DashboardClient({ sites, allPlantings }: Props) {
             </div>
             <div>
               <div className="text-xs text-gray-500">총 수목 수량</div>
-              <div className="text-xl font-bold text-gray-900">
-                {totalQty > 0 ? totalQty.toLocaleString() + ' 주' : '-'}
-              </div>
+              <div className="text-xl font-bold text-gray-900">{totalQty > 0 ? totalQty.toLocaleString() + ' 주' : '-'}</div>
             </div>
           </div>
-
           <div className="h-10 border-l" />
-
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
               <Leaf className="h-5 w-5 text-green-500" />
             </div>
             <div>
               <div className="text-xs text-gray-500">예상 하자수량</div>
-              <div className="text-xl font-bold text-gray-900">
-                {totalDefectQty > 0 ? totalDefectQty.toLocaleString() + ' 주' : '-'}
-              </div>
+              <div className="text-xl font-bold text-gray-900">{totalDefectQty > 0 ? totalDefectQty.toLocaleString() + ' 주' : '-'}</div>
             </div>
           </div>
-
           <div className="h-10 border-l" />
-
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
               <svg className="h-8 w-8" viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="3" />
                 {avgRate !== null && (
-                  <circle
-                    cx="18" cy="18" r="15.9" fill="none"
+                  <circle cx="18" cy="18" r="15.9" fill="none"
                     stroke={avgRate >= 0.20 ? '#ef4444' : avgRate >= 0.10 ? '#eab308' : '#22c55e'}
                     strokeWidth="3"
                     strokeDasharray={`${(avgRate * 100).toFixed(1)} 100`}
@@ -446,9 +735,7 @@ export function DashboardClient({ sites, allPlantings }: Props) {
               <div className="text-xl font-bold text-gray-900">{avgRatePct}</div>
             </div>
           </div>
-
           <div className="h-10 border-l" />
-
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-yellow-50 flex items-center justify-center">
               <Coins className="h-5 w-5 text-yellow-500" />
@@ -458,10 +745,8 @@ export function DashboardClient({ sites, allPlantings }: Props) {
               <div className="text-xl font-bold text-gray-900">{totalReserveStr}</div>
             </div>
           </div>
-
           <div className="h-10 border-l ml-auto" />
-
-          {/* 리스크 등급 분포 도넛 */}
+          {/* 도넛 차트 */}
           <div className="flex items-center gap-4">
             <div>
               <div className="text-xs text-gray-500 mb-1 text-center">리스크 등급 분포</div>
@@ -479,13 +764,10 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                     let offset = 0
                     return segs.map((seg, i) => {
                       const dash = seg.pct * circ
-                      const el = (
-                        <circle key={i} cx="18" cy="18" r="15.9" fill="none"
-                          stroke={seg.color} strokeWidth="4"
-                          strokeDasharray={`${dash} ${circ - dash}`}
-                          strokeDashoffset={-offset + circ * 0.25}
-                        />
-                      )
+                      const el = <circle key={i} cx="18" cy="18" r="15.9" fill="none"
+                        stroke={seg.color} strokeWidth="4"
+                        strokeDasharray={`${dash} ${circ - dash}`}
+                        strokeDashoffset={-offset + circ * 0.25} />
                       offset += dash
                       return el
                     })
