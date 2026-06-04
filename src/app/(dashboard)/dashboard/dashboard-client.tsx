@@ -86,20 +86,23 @@ function parseDefectSheet(sheet: XLSX.WorkSheet): {
   rows: DefectAnalysisRow[]
 } {
   const headerInfo = {
-    site_code: String(getCellVal(sheet, 'C6') ?? '').trim(),
-    site_name: String(getCellVal(sheet, 'C7') ?? '').trim(),
-    completion_date: getCellVal(sheet, 'E6'),
-    planting_date: getCellVal(sheet, 'E7'),
-    contractor_name: String(getCellVal(sheet, 'I6') ?? '').trim(),
-    region: String(getCellVal(sheet, 'I7') ?? '').trim(),
+    site_code: String(getCellVal(sheet, 'C2') ?? '').trim(),
+    site_name: String(getCellVal(sheet, 'C3') ?? '').trim(),
+    completion_date: getCellVal(sheet, 'F2'),
+    planting_date: getCellVal(sheet, 'F3'),
+    contractor_name: String(getCellVal(sheet, 'J2') ?? '').trim(),
+    region: String(getCellVal(sheet, 'J3') ?? '').trim(),
   }
 
+  // 컬럼 매핑 (양식 헤더 기준):
+  // A=번호, B=수종명, C=수량, D=수고H, E=수관폭W, F=흉고B, G=근원R,
+  // H=단가, I=예상하자율, J=예상하자수량, K=예상예비비, L=리스크등급, M=권장조치, N=세부조치, O=비고
   const rows: DefectAnalysisRow[] = []
   for (let r = 13; r <= 62; r++) {
-    const speciesName = getCellVal(sheet, `C${r}`)
+    const speciesName = getCellVal(sheet, `B${r}`)
     if (!speciesName || String(speciesName).trim() === '') break
 
-    const rawRate = getCellVal(sheet, `J${r}`)
+    const rawRate = getCellVal(sheet, `I${r}`)
     let defectRate: number | undefined
     if (rawRate != null) {
       const n = Number(rawRate)
@@ -114,17 +117,17 @@ function parseDefectSheet(sheet: XLSX.WorkSheet): {
       시공사: headerInfo.contractor_name,
       지역: headerInfo.region,
       수종명: String(speciesName).trim(),
-      수량: getCellVal(sheet, `D${r}`) != null ? Number(getCellVal(sheet, `D${r}`)) : undefined,
-      수고H: getCellVal(sheet, `E${r}`) != null ? Number(getCellVal(sheet, `E${r}`)) : undefined,
-      수관폭W: getCellVal(sheet, `F${r}`) != null ? Number(getCellVal(sheet, `F${r}`)) : undefined,
-      흉고직경B: getCellVal(sheet, `G${r}`) != null ? Number(getCellVal(sheet, `G${r}`)) : undefined,
-      근원직경R: getCellVal(sheet, `H${r}`) != null ? Number(getCellVal(sheet, `H${r}`)) : undefined,
-      단가: getCellVal(sheet, `I${r}`) != null ? Number(getCellVal(sheet, `I${r}`)) : undefined,
+      수량: getCellVal(sheet, `C${r}`) != null ? Number(getCellVal(sheet, `C${r}`)) : undefined,
+      수고H: getCellVal(sheet, `D${r}`) != null ? Number(getCellVal(sheet, `D${r}`)) : undefined,
+      수관폭W: getCellVal(sheet, `E${r}`) != null ? Number(getCellVal(sheet, `E${r}`)) : undefined,
+      흉고직경B: getCellVal(sheet, `F${r}`) != null ? Number(getCellVal(sheet, `F${r}`)) : undefined,
+      근원직경R: getCellVal(sheet, `G${r}`) != null ? Number(getCellVal(sheet, `G${r}`)) : undefined,
+      단가: getCellVal(sheet, `H${r}`) != null ? Number(getCellVal(sheet, `H${r}`)) : undefined,
       예상하자율: defectRate,
-      예상하자수량: getCellVal(sheet, `K${r}`) != null ? Number(getCellVal(sheet, `K${r}`)) : undefined,
-      예상예비비: getCellVal(sheet, `L${r}`) != null ? Number(getCellVal(sheet, `L${r}`)) : undefined,
-      리스크등급: getCellVal(sheet, `M${r}`) != null ? String(getCellVal(sheet, `M${r}`)) : undefined,
-      비고: getCellVal(sheet, `P${r}`) != null ? String(getCellVal(sheet, `P${r}`)) : undefined,
+      예상하자수량: getCellVal(sheet, `J${r}`) != null ? Number(getCellVal(sheet, `J${r}`)) : undefined,
+      예상예비비: getCellVal(sheet, `K${r}`) != null ? Number(getCellVal(sheet, `K${r}`)) : undefined,
+      리스크등급: getCellVal(sheet, `L${r}`) != null ? String(getCellVal(sheet, `L${r}`)) : undefined,
+      비고: getCellVal(sheet, `O${r}`) != null ? String(getCellVal(sheet, `O${r}`)) : undefined,
     })
   }
 
