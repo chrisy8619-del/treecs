@@ -121,8 +121,6 @@ export function DashboardClient({ sites, allPlantings }: Props) {
   const overall = overallRisk(avgRate)
   const avgRatePct = avgRate !== null ? (avgRate * 100).toFixed(2) + '%' : '-'
   const totalReserveStr = totalReserve > 0 ? '₩' + totalReserve.toLocaleString() : '-'
-  const contractorName = rows[0]?.contractor_name ?? null
-
   return (
     <div className="space-y-0 -m-6">
       {/* ── 상단 헤더 ── */}
@@ -160,7 +158,7 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                   <tr className="border-b">
                     {/* 현장코드 — 입력 가능 */}
                     <td className="px-4 py-2.5 bg-gray-100 font-medium text-gray-500 w-24 text-xs">현장코드</td>
-                    <td className="px-3 py-1.5 relative">
+                    <td className="px-3 py-1.5 relative" colSpan={3}>
                       <div className="relative">
                         <input
                           type="text"
@@ -188,13 +186,11 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 bg-gray-50 font-medium text-gray-600 w-20 text-xs border-l">시공사</td>
-                    <td className="px-4 py-2.5 text-gray-900 text-xs">{contractorName ?? '-'}</td>
                   </tr>
                   <tr className="border-b">
                     {/* 현장명 — 입력 가능 */}
                     <td className="px-4 py-2.5 bg-gray-100 font-medium text-gray-500 text-xs">현장명</td>
-                    <td className="px-3 py-1.5 relative">
+                    <td className="px-3 py-1.5 relative" colSpan={3}>
                       <div className="relative">
                         <input
                           type="text"
@@ -222,8 +218,6 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 bg-gray-50 font-medium text-gray-600 text-xs border-l">협력사</td>
-                    <td className="px-4 py-2.5 text-gray-400 text-xs">-</td>
                   </tr>
                   <tr className="border-b">
                     <td className="px-4 py-2.5 bg-gray-50 font-medium text-gray-600 text-xs">준공일</td>
