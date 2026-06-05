@@ -168,7 +168,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
     allRows: PreviewRow[]
     defectAnalysisData?: {
       rows: DefectAnalysisRow[]
-      fileBase64: string   // 서버 전송용 원본 파일
+      rawFile: File        // 서버 전송용 원본 파일
       totalRows: number
     }
   } | null>(null)
@@ -196,20 +196,12 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
         const { rows, rawRows } = parseDefectAnalysisExcel(sheet)
 
-        // 파일을 base64로 안전 인코딩 (btoa는 바이트>127 에서 오류 — 청크 방식 사용)
-        const CHUNK = 8192
-        let binary = ''
-        for (let i = 0; i < data.length; i += CHUNK) {
-          binary += String.fromCharCode(...Array.from(data.subarray(i, i + CHUNK)))
-        }
-        const fileBase64 = btoa(binary)
-
         const headers = ['현장코드', '현장명', '수종명', '수량', '하자수량', '하자율', '단가', '예상예비비', '리스크등급', '협력사']
         setPreview({
           headers,
           rows: rawRows.slice(0, 5),
           allRows: rawRows,
-          defectAnalysisData: { rows, fileBase64, totalRows: rows.length },
+          defectAnalysisData: { rows, rawFile: file, totalRows: rows.length },
         })
       } else {
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -239,9 +231,9 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       let res: UploadResult
 
       if (uploadType === 'defect_analysis' && preview.defectAnalysisData) {
-        // 파일 base64를 서버에 전달 → 서버에서 파싱+배치 처리
-        // (rows 배열 직렬화로 인한 Vercel 응답 크기 제한 우회)
-        const { fileBase64, totalRows } = preview.defectAnalysisData
+        // API Route로 파일 직접 전송 (multipart/form-data)
+        // 서버 액션 페이로드 한도 우회 + 60초 제한 내 배치 처리
+        const { rawFile, totalRows } = preview.defectAnalysisData
         const totalBatches = Math.ceil(totalRows / BATCH_SIZE)
 
         let totalSuccess = 0
@@ -252,10 +244,20 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
 
         for (let bi = 0; bi < totalBatches; bi++) {
           setBatchProgress({ current: bi + 1, total: totalBatches, done: totalSuccess, fail: totalFail })
-          const batchRes = await uploadDefectAnalysisFromFile(fileBase64, bi * BATCH_SIZE, BATCH_SIZE)
-          totalSuccess += batchRes.successCount
-          totalFail += batchRes.failCount
-          if (batchRes.errors.length > 0) allErrors.push(...batchRes.errors)
+
+          const fd = new FormData()
+          fd.append('file', rawFile)
+          fd.append('batchOffset', String(bi * BATCH_SIZE))
+
+          const resp = await fetch('/api/upload-excel', { method: 'POST', body: fd })
+          if (!resp.ok) {
+            allErrors.push(`배치 ${bi + 1} 서버 오류 (${resp.status})`)
+            break
+          }
+          const batchRes = await resp.json()
+          totalSuccess += batchRes.successCount ?? 0
+          totalFail += batchRes.failCount ?? 0
+          if (batchRes.errors?.length > 0) allErrors.push(...batchRes.errors)
         }
 
         setBatchProgress(null)

@@ -14,7 +14,7 @@ import {
   RefreshCw, Upload, TrendingUp, Coins, TreePine, Leaf,
   Target, Search, FileDown, ChevronLeft, ChevronRight,
 } from 'lucide-react'
-import { uploadDefectAnalysisFromFile, type DefectAnalysisRow } from '@/app/actions/upload'
+import { type DefectAnalysisRow } from '@/app/actions/upload'
 import { BATCH_SIZE } from '@/lib/upload-config'
 
 // ─── 타입 ────────────────────────────────────────────────
@@ -340,14 +340,6 @@ export function DashboardClient({ sites, allPlantings }: Props) {
         return
       }
 
-      // 파일을 base64로 인코딩 (서버 전달용)
-      // btoa는 바이트>127에서 오류 — 청크 방식으로 안전하게 base64 변환
-      const CHUNK = 8192
-      let binary = ''
-      for (let i = 0; i < data.length; i += CHUNK) {
-        binary += String.fromCharCode(...Array.from(data.subarray(i, i + CHUNK)))
-      }
-      const fileBase64 = btoa(binary)
       const totalRows = rows.length
       const totalBatches = Math.ceil(totalRows / BATCH_SIZE)
 
@@ -357,9 +349,16 @@ export function DashboardClient({ sites, allPlantings }: Props) {
 
         for (let bi = 0; bi < totalBatches; bi++) {
           setBatchProgress({ current: bi + 1, total: totalBatches })
-          const batchRes = await uploadDefectAnalysisFromFile(fileBase64, bi * BATCH_SIZE, BATCH_SIZE)
-          totalSuccess += batchRes.successCount
-          totalFail += batchRes.failCount
+
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('batchOffset', String(bi * BATCH_SIZE))
+
+          const resp = await fetch('/api/upload-excel', { method: 'POST', body: fd })
+          if (!resp.ok) break
+          const batchRes = await resp.json()
+          totalSuccess += batchRes.successCount ?? 0
+          totalFail += batchRes.failCount ?? 0
         }
 
         setBatchProgress(null)
