@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { SEASON_KO_TO_CODE } from '@/lib/season-utils'
+import { BATCH_SIZE } from '@/lib/upload-config'
 
 export type UploadResult = {
   success: boolean
@@ -827,11 +828,6 @@ export async function uploadDefectAnalysis(
     error_message: errors.length > 0 ? errors.slice(0, 10).join('\n') : null,
   })
 
-  revalidatePath('/analytics')
-  revalidatePath('/plantings')
-  revalidatePath('/settings')
-  revalidatePath('/dashboard')
-
   const pendingNotes = pendingSiteNames.length > 0
     ? [`현장 '${pendingSiteNames.join(', ')}'이(가) 승인 대기 상태로 등록되었습니다. 관리자 승인 후 대시보드에 표시됩니다.`]
     : []
@@ -843,5 +839,25 @@ export async function uploadDefectAnalysis(
     failCount: errors.length,
     errors: [...pendingNotes, ...errors.slice(0, 20)],
   }
+}
+
+// 배치 단위 업로드 — 클라이언트에서 BATCH_SIZE 행씩 잘라 호출
+// Vercel 서버리스 60초 제한 대응: 50행 × n번 호출로 타임아웃 방지
+export async function uploadDefectAnalysisBatch(
+  rows: DefectAnalysisRow[],
+  batchIndex: number,    // 0-based 배치 번호 (로그용)
+  totalBatches: number,  // 전체 배치 수 (로그용)
+): Promise<UploadResult> {
+  const result = await uploadDefectAnalysis(rows)
+
+  // 마지막 배치에서만 revalidate (중간 배치는 생략해 속도 향상)
+  if (batchIndex === totalBatches - 1) {
+    revalidatePath('/analytics')
+    revalidatePath('/plantings')
+    revalidatePath('/settings')
+    revalidatePath('/dashboard')
+  }
+
+  return result
 }
 

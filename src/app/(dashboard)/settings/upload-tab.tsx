@@ -5,10 +5,11 @@ import * as XLSX from 'xlsx'
 import {
   uploadPlantingRecords,
   uploadInspectionResults,
-  uploadDefectAnalysis,
+  uploadDefectAnalysisBatch,
   type UploadResult,
   type DefectAnalysisRow,
 } from '@/app/actions/upload'
+import { BATCH_SIZE } from '@/lib/upload-config'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -171,6 +172,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
   } | null>(null)
   const [result, setResult] = useState<UploadResult | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; done: number; fail: number } | null>(null)
 
   const selectedType = UPLOAD_TYPES.find((t) => t.value === uploadType)!
 
@@ -226,7 +228,35 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       let res: UploadResult
 
       if (uploadType === 'defect_analysis' && preview.defectAnalysisData) {
-        res = await uploadDefectAnalysis(preview.defectAnalysisData.rows)
+        // 배치 처리 — BATCH_SIZE행씩 나눠 순차 호출 (Vercel 60초 타임아웃 방지)
+        const allRows = preview.defectAnalysisData.rows
+        const batches: DefectAnalysisRow[][] = []
+        for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
+          batches.push(allRows.slice(i, i + BATCH_SIZE))
+        }
+
+        let totalSuccess = 0
+        let totalFail = 0
+        const allErrors: string[] = []
+
+        setBatchProgress({ current: 0, total: batches.length, done: 0, fail: 0 })
+
+        for (let bi = 0; bi < batches.length; bi++) {
+          setBatchProgress({ current: bi + 1, total: batches.length, done: totalSuccess, fail: totalFail })
+          const batchRes = await uploadDefectAnalysisBatch(batches[bi], bi, batches.length)
+          totalSuccess += batchRes.successCount
+          totalFail += batchRes.failCount
+          if (batchRes.errors.length > 0) allErrors.push(...batchRes.errors)
+        }
+
+        setBatchProgress(null)
+        res = {
+          success: totalSuccess > 0,
+          totalRows: allRows.length,
+          successCount: totalSuccess,
+          failCount: totalFail,
+          errors: allErrors.slice(0, 20),
+        }
       } else if (uploadType === 'planting') {
         res = await uploadPlantingRecords(preview.allRows as never)
       } else {
@@ -244,6 +274,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
     setPreview(null)
     setFileName('')
     setResult(null)
+    setBatchProgress(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -392,17 +423,45 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
             </div>
           )}
 
+          {/* 배치 진행률 표시 */}
+          {batchProgress && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-blue-800">
+                  업로드 중... {batchProgress.current} / {batchProgress.total} 배치
+                </span>
+                <span className="text-blue-600 text-xs">
+                  성공 {batchProgress.done}행 · 실패 {batchProgress.fail}행
+                </span>
+              </div>
+              <div className="w-full bg-blue-100 rounded-full h-2">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((batchProgress.current / batchProgress.total) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-blue-600">
+                전체 {preview.defectAnalysisData?.rows.length.toLocaleString()}행 ·{' '}
+                배치당 {BATCH_SIZE}행 · 잠시 기다려주세요
+              </p>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">
               미리보기 — {fileName}{' '}
               <span className="text-muted-foreground font-normal">
-                (총 {preview.allRows.length.toLocaleString()}종, 상위 5행 표시)
+                (총 {preview.allRows.length.toLocaleString()}행, 상위 5행 표시)
               </span>
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleReset}>취소</Button>
+              <Button variant="outline" size="sm" onClick={handleReset} disabled={isPending}>취소</Button>
               <Button size="sm" disabled={isPending} onClick={handleUpload}>
-                {isPending ? '처리 중...' : `${selectedType.label} 업로드`}
+                {isPending
+                  ? batchProgress
+                    ? `${batchProgress.current}/${batchProgress.total} 처리 중...`
+                    : '처리 중...'
+                  : `${selectedType.label} 업로드`}
               </Button>
             </div>
           </div>

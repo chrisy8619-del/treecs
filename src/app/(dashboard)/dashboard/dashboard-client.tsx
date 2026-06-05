@@ -14,7 +14,8 @@ import {
   RefreshCw, Upload, TrendingUp, Coins, TreePine, Leaf,
   Target, Search, FileDown, ChevronLeft, ChevronRight,
 } from 'lucide-react'
-import { uploadDefectAnalysis, type DefectAnalysisRow } from '@/app/actions/upload'
+import { uploadDefectAnalysisBatch, type DefectAnalysisRow } from '@/app/actions/upload'
+import { BATCH_SIZE } from '@/lib/upload-config'
 
 // ─── 타입 ────────────────────────────────────────────────
 export type SiteOption = {
@@ -234,6 +235,7 @@ export function DashboardClient({ sites, allPlantings }: Props) {
 
   // 엑셀 업로드 상태
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null)
 
   // 선택된 현장
   const site = useMemo(() => sites.find((s) => s.id === selectedSiteId) ?? sites[0] ?? null, [sites, selectedSiteId])
@@ -333,19 +335,35 @@ export function DashboardClient({ sites, allPlantings }: Props) {
         setUploadStatus({ type: 'error', msg: '수목 데이터가 없습니다. 헤더 행(1행) 이후에 데이터를 입력하세요.' })
         return
       }
-      const hasSiteCode = rows.some((r) => r.현장코드)
-      if (!hasSiteCode) {
-        setUploadStatus({ type: 'error', msg: '현장코드 컬럼이 없거나 모두 비어 있습니다. 양식을 확인하세요.' })
+      const hasSite = rows.some((r) => r.현장코드 || r.현장명)
+      if (!hasSite) {
+        setUploadStatus({ type: 'error', msg: '현장코드 또는 현장명이 없습니다. 양식을 확인하세요.' })
         return
       }
 
       startTransition(async () => {
-        const res = await uploadDefectAnalysis(rows)
-        if (res.success) {
-          setUploadStatus({ type: 'success', msg: `${res.successCount}건 업로드 완료${res.failCount > 0 ? ` (${res.failCount}건 실패)` : ''} — 새로고침 중...` })
+        // 배치 처리 — BATCH_SIZE행씩 나눠 순차 호출
+        const batches: DefectAnalysisRow[][] = []
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+          batches.push(rows.slice(i, i + BATCH_SIZE))
+        }
+
+        let totalSuccess = 0
+        let totalFail = 0
+
+        for (let bi = 0; bi < batches.length; bi++) {
+          setBatchProgress({ current: bi + 1, total: batches.length })
+          const batchRes = await uploadDefectAnalysisBatch(batches[bi], bi, batches.length)
+          totalSuccess += batchRes.successCount
+          totalFail += batchRes.failCount
+        }
+
+        setBatchProgress(null)
+        if (totalSuccess > 0) {
+          setUploadStatus({ type: 'success', msg: `${totalSuccess}건 업로드 완료${totalFail > 0 ? ` (${totalFail}건 실패)` : ''} — 새로고침 중...` })
           setTimeout(() => window.location.reload(), 1200)
         } else {
-          setUploadStatus({ type: 'error', msg: res.errors[0] ?? '업로드 실패' })
+          setUploadStatus({ type: 'error', msg: '업로드 실패 — 파일 형식을 확인하세요.' })
         }
       })
     }
@@ -553,6 +571,24 @@ export function DashboardClient({ sites, allPlantings }: Props) {
             </button>
           </div>
         </div>
+
+        {/* 배치 진행률 */}
+        {batchProgress && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-blue-800">
+                업로드 중... {batchProgress.current} / {batchProgress.total} 배치
+              </span>
+              <span className="text-blue-500">{Math.round((batchProgress.current / batchProgress.total) * 100)}%</span>
+            </div>
+            <div className="w-full bg-blue-100 rounded-full h-1.5">
+              <div
+                className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${Math.round((batchProgress.current / batchProgress.total) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* 업로드 결과 메시지 */}
         {uploadStatus && (
