@@ -9,7 +9,6 @@ import {
   SiteReserveCostChart,
   type SiteReserveData,
 } from './charts'
-import { SampleDataButton } from './sample-data-button'
 import {
   Table,
   TableBody,
@@ -272,12 +271,9 @@ export default async function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">분석</h2>
-          <p className="text-muted-foreground">하자율 통계 및 리스크 분석 현황입니다.</p>
-        </div>
-        <SampleDataButton />
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">대시보드</h2>
+        <p className="text-muted-foreground">하자율 통계 및 리스크 분석 현황입니다.</p>
       </div>
 
       {!hasData ? (
