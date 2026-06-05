@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import * as XLSX from 'xlsx'
-import { BATCH_SIZE } from '@/lib/upload-config'
 import { SEASON_KO_TO_CODE } from '@/lib/season-utils'
 
-// Vercel 최대 실행 시간 설정 (Pro: 300s, Hobby: 60s)
 export const maxDuration = 60
+
+// 클라이언트에서 파싱된 JSON 행 타입
+type RawRow = Record<string, unknown>
 
 function safeNum(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -63,33 +63,18 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
 
-  // multipart/form-data로 파일과 배치 오프셋 수신
-  const formData = await req.formData()
-  const file = formData.get('file') as File | null
-  const batchOffset = parseInt(formData.get('batchOffset') as string ?? '0')
+  // JSON으로 배치 행 수신 (클라이언트가 파싱 후 전송)
+  const body = await req.json() as {
+    rows: RawRow[]
+    isLast: boolean
+    totalRowCount: number
+    fileName: string
+  }
+  const { rows: batch, isLast, totalRowCount, fileName } = body
 
-  if (!file) return NextResponse.json({ error: '파일이 없습니다.' }, { status: 400 })
-
-  // 파일 파싱
-  const arrayBuffer = await file.arrayBuffer()
-  const data = new Uint8Array(arrayBuffer)
-  const wb = XLSX.read(data, { type: 'array' })
-  const ws = wb.Sheets[wb.SheetNames[0]]
-
-  const rawAll: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: null })
-  const allRows = rawAll
-    .map((r) => {
-      const c: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(r)) {
-        c[k.trim()] = typeof v === 'string' ? v.trim() : v
-      }
-      return c
-    })
-    .filter((r) => r['현장명'] || r['현장코드'] || r['수종명'])
-
-  const totalRowCount = allRows.length
-  const batch = allRows.slice(batchOffset, batchOffset + BATCH_SIZE)
-  const isLast = batchOffset + BATCH_SIZE >= totalRowCount
+  if (!batch || batch.length === 0) {
+    return NextResponse.json({ success: true, successCount: 0, failCount: 0, errors: [], isLast })
+  }
 
   // org_id
   const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).maybeSingle()
@@ -115,7 +100,7 @@ export async function POST(req: NextRequest) {
 
   for (let i = 0; i < batch.length; i++) {
     const row = batch[i]
-    const rowNum = batchOffset + i + 2
+    const rowNum = i + 2
 
     const site_name = String(row['현장명'] ?? '').trim()
     const site_code = String(row['현장코드'] ?? '').trim() || (site_name ? toSiteCode(site_name) : '')
@@ -225,7 +210,7 @@ export async function POST(req: NextRequest) {
   if (isLast) {
     await supabase.from('upload_logs').insert({
       uploaded_by: user.id,
-      file_name: file.name,
+      file_name: fileName,
       upload_type: '하자율예측',
       row_count: totalRowCount,
       status: errors.length === 0 ? 'success' : successCount > 0 ? 'partial' : 'failed',
@@ -239,7 +224,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: successCount > 0,
-    totalRowCount,
     successCount,
     failCount: errors.length,
     errors: errors.slice(0, 10),

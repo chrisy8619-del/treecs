@@ -5,9 +5,7 @@ import * as XLSX from 'xlsx'
 import {
   uploadPlantingRecords,
   uploadInspectionResults,
-  uploadDefectAnalysisFromFile,
   type UploadResult,
-  type DefectAnalysisRow,
 } from '@/app/actions/upload'
 import { BATCH_SIZE } from '@/lib/upload-config'
 import { Button } from '@/components/ui/button'
@@ -84,8 +82,9 @@ function parseUnitPrice(v: unknown): number | null {
 
 // 하자율 예측 엑셀 파싱 (새 flat 테이블 구조)
 // 1행: 헤더 컬럼명, 2행~: 실제 데이터 (컬럼명 공백 자동 trim 처리)
+// rows: 서버 전송용 원본 trimmed 행, rawRows: 미리보기용 포맷된 행
 function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
-  rows: DefectAnalysisRow[]
+  rows: PreviewRow[]
   rawRows: PreviewRow[]
 } {
   const rawAll: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: null })
@@ -99,7 +98,7 @@ function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
     return cleaned
   })
 
-  const rows: DefectAnalysisRow[] = []
+  const rows: PreviewRow[] = []
   const rawRows: PreviewRow[] = []
 
   for (const r of raw) {
@@ -115,42 +114,21 @@ function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
     const reserveCost = safeNum(r['예상 예비비(₩)']) ?? safeNum(r['예상 예비비(d)'])
     const unitPrice = parseUnitPrice(r['단가'])
 
-    const row: DefectAnalysisRow = {
-      날짜: r['날짜'] as string | number | undefined ?? undefined,
-      현장코드: siteCode || undefined,
-      현장명: siteName || undefined,
-      준공일: r['준공일'] as string | number | undefined ?? undefined,
-      식재시기: r['식재시기'] as string | number | undefined ?? undefined,
-      협력사: r['협력사'] != null ? String(r['협력사']).trim() : undefined,
-      수종명: speciesName || undefined,
-      '수고 H(m)': safeNum(r['수고 H(m)']) ?? undefined,
-      '수관폭 W(m)': safeNum(r['수관폭 W(m)']) ?? undefined,
-      '흉고직경 B(cm)': safeNum(r['흉고직경 B(cm)']) ?? undefined,
-      '근원직경 R(cm)': safeNum(r['근원직경 R(cm)']) ?? undefined,
-      수량: qty ?? undefined,
-      하자수량: defectQty ?? undefined,
-      지역: r['지역'] != null ? String(r['지역']).trim() : undefined,
-      단가: unitPrice ?? undefined,
-      '계절(수식)': r['계절(수식)'] != null ? String(r['계절(수식)']).trim() : undefined,
-      규격: r['규격'] != null ? String(r['규격']).trim() : undefined,
-      리스크등급: r['리스크등급'] != null ? String(r['리스크등급']).trim() : undefined,
-      권장조치: r['권장조치'] != null ? String(r['권장조치']).trim() : undefined,
-      세부조치: r['세부조치'] != null ? String(r['세부조치']).trim() : undefined,
-      '예상 예비비(₩)': reserveCost ?? undefined,
-      '예상 예비비(d)': safeNum(r['예상 예비비(d)']) ?? undefined,
-    }
-    rows.push(row)
+    // 서버 전송용: 원본 컬럼명 그대로 유지 (서버가 동일 컬럼명으로 접근)
+    rows.push(r as PreviewRow)
+
+    // 미리보기용: 포맷된 표시값
     rawRows.push({
       현장코드: siteCode || null,
-      현장명: row.현장명 ?? null,
+      현장명: siteName || null,
       수종명: speciesName || null,
       수량: qty,
       하자수량: defectQty,
       하자율: defectRatePct,
       단가: unitPrice != null ? `₩${unitPrice.toLocaleString()}` : (r['단가'] ? String(r['단가']) : null),
       예상예비비: reserveCost != null ? `₩${reserveCost.toLocaleString()}` : null,
-      리스크등급: row.리스크등급 ?? null,
-      협력사: row.협력사 ?? null,
+      리스크등급: r['리스크등급'] != null ? String(r['리스크등급']).trim() : null,
+      협력사: r['협력사'] != null ? String(r['협력사']).trim() : null,
     })
   }
 
@@ -167,8 +145,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
     rows: PreviewRow[]
     allRows: PreviewRow[]
     defectAnalysisData?: {
-      rows: DefectAnalysisRow[]
-      rawFile: File        // 서버 전송용 원본 파일
+      rows: PreviewRow[]   // 클라이언트 파싱 완료된 행 (JSON 전송용)
       totalRows: number
     }
   } | null>(null)
@@ -201,7 +178,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
           headers,
           rows: rawRows.slice(0, 5),
           allRows: rawRows,
-          defectAnalysisData: { rows, rawFile: file, totalRows: rows.length },
+          defectAnalysisData: { rows, totalRows: rows.length },
         })
       } else {
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -231,9 +208,8 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       let res: UploadResult
 
       if (uploadType === 'defect_analysis' && preview.defectAnalysisData) {
-        // API Route로 파일 직접 전송 (multipart/form-data)
-        // 서버 액션 페이로드 한도 우회 + 60초 제한 내 배치 처리
-        const { rawFile, totalRows } = preview.defectAnalysisData
+        // 클라이언트에서 파싱된 JSON을 배치로 전송 (파일 전송 X → 용량 문제 없음)
+        const { rows: allRows, totalRows } = preview.defectAnalysisData
         const totalBatches = Math.ceil(totalRows / BATCH_SIZE)
 
         let totalSuccess = 0
@@ -245,11 +221,18 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
         for (let bi = 0; bi < totalBatches; bi++) {
           setBatchProgress({ current: bi + 1, total: totalBatches, done: totalSuccess, fail: totalFail })
 
-          const fd = new FormData()
-          fd.append('file', rawFile)
-          fd.append('batchOffset', String(bi * BATCH_SIZE))
+          const batchRows = allRows.slice(bi * BATCH_SIZE, (bi + 1) * BATCH_SIZE)
 
-          const resp = await fetch('/api/upload-excel', { method: 'POST', body: fd })
+          const resp = await fetch('/api/upload-excel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rows: batchRows,
+              isLast: bi === totalBatches - 1,
+              totalRowCount: totalRows,
+              fileName,
+            }),
+          })
           if (!resp.ok) {
             allErrors.push(`배치 ${bi + 1} 서버 오류 (${resp.status})`)
             break
