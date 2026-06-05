@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { SiteAnalysisTable } from './site-analysis-table'
 
 // 엑셀 기준 리스크 등급: ≥20% 고위험, ≥10% 중위험, 미만 저위험
 function riskBadge(rate: number) {
@@ -515,70 +516,9 @@ export default async function AnalyticsPage() {
             </Card>
           </div>
 
-          {/* 현장별 하자율 + 예비비 테이블 */}
+          {/* 현장별 분석 테이블 — 전체 현장 20개씩 페이지네이션 */}
           {(siteData.length > 0 || siteReserveData.length > 0) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  현장별 분석
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">총 {Math.max(siteData.length, siteReserveData.length)}개 현장</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>순위</TableHead>
-                      <TableHead>현장명</TableHead>
-                      <TableHead className="text-right">점검 수량</TableHead>
-                      <TableHead className="text-right">하자 수량</TableHead>
-                      <TableHead className="text-right">하자율</TableHead>
-                      <TableHead className="text-right">예상 예비비</TableHead>
-                      <TableHead>리스크 등급</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {siteData.length > 0
-                      ? siteData.map((site, i) => {
-                          const reserve = siteReserveData.find((r) => r.name === site.name)
-                          return (
-                            <TableRow key={i}>
-                              <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
-                              <TableCell className="font-medium">{site.name}</TableCell>
-                              <TableCell className="text-right">{site.inspected.toLocaleString()}</TableCell>
-                              <TableCell className="text-right">{site.defect.toLocaleString()}</TableCell>
-                              <TableCell className="text-right font-semibold">
-                                <span className={site.defect_rate >= 0.20 ? 'text-red-500' : site.defect_rate >= 0.10 ? 'text-yellow-500' : ''}>
-                                  {(site.defect_rate * 100).toFixed(1)}%
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-right text-orange-600">
-                                {reserve ? `₩${reserve.reserve_cost.toLocaleString()}` : '-'}
-                              </TableCell>
-                              <TableCell>{riskBadge(site.defect_rate)}</TableCell>
-                            </TableRow>
-                          )
-                        })
-                      : siteReserveData.map((site, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
-                            <TableCell className="font-medium">{site.name}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">-</TableCell>
-                            <TableCell className="text-right text-muted-foreground">-</TableCell>
-                            <TableCell className="text-right font-semibold">
-                              <span className={site.defect_rate >= 0.20 ? 'text-red-500' : site.defect_rate >= 0.10 ? 'text-yellow-500' : ''}>
-                                {(site.defect_rate * 100).toFixed(1)}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right text-orange-600">₩{site.reserve_cost.toLocaleString()}</TableCell>
-                            <TableCell>{riskBadge(site.defect_rate)}</TableCell>
-                          </TableRow>
-                        ))
-                    }
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <SiteAnalysisTable siteData={siteData} siteReserveData={siteReserveData} />
           )}
 
           {/* 수종별 테이블 */}
