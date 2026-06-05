@@ -68,19 +68,38 @@ export function AppSidebar() {
           <SidebarGroupLabel>메뉴</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navMain.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} className="w-full">
-                    <SidebarMenuButton
-                      tooltip={item.title}
-                      isActive={pathname === item.href}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-              ))}
+              {navMain.map((item) => {
+                const isDashboard = item.href === '/analytics'
+                const isActive = pathname === item.href
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <Link href={item.href} className="w-full">
+                      {isDashboard ? (
+                        <SidebarMenuButton
+                          tooltip={item.title}
+                          isActive={isActive}
+                          className={
+                            isActive
+                              ? 'bg-[#1a3a2a] text-white hover:bg-[#2a5a3e] hover:text-white'
+                              : 'bg-[#1a3a2a] text-white hover:bg-[#2a5a3e] hover:text-white opacity-90'
+                          }
+                        >
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </SidebarMenuButton>
+                      ) : (
+                        <SidebarMenuButton
+                          tooltip={item.title}
+                          isActive={isActive}
+                        >
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </SidebarMenuButton>
+                      )}
+                    </Link>
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
