@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import {
   uploadPlantingRecords,
   uploadInspectionResults,
-  uploadDefectAnalysisBatch,
+  uploadDefectAnalysisFromFile,
   type UploadResult,
   type DefectAnalysisRow,
 } from '@/app/actions/upload'
@@ -168,6 +168,8 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
     allRows: PreviewRow[]
     defectAnalysisData?: {
       rows: DefectAnalysisRow[]
+      fileBase64: string   // 서버 전송용 원본 파일
+      totalRows: number
     }
   } | null>(null)
   const [result, setResult] = useState<UploadResult | null>(null)
@@ -186,19 +188,25 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
 
     const reader = new FileReader()
     reader.onload = (e) => {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer)
+      const arrayBuffer = e.target?.result as ArrayBuffer
+      const data = new Uint8Array(arrayBuffer)
       const workbook = XLSX.read(data, { type: 'array' })
 
       if (uploadType === 'defect_analysis') {
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
         const { rows, rawRows } = parseDefectAnalysisExcel(sheet)
 
+        // 파일을 base64로 인코딩해서 저장 (서버 전송용)
+        let binary = ''
+        data.forEach((b) => { binary += String.fromCharCode(b) })
+        const fileBase64 = btoa(binary)
+
         const headers = ['현장코드', '현장명', '수종명', '수량', '하자수량', '하자율', '단가', '예상예비비', '리스크등급', '협력사']
         setPreview({
           headers,
           rows: rawRows.slice(0, 5),
           allRows: rawRows,
-          defectAnalysisData: { rows },
+          defectAnalysisData: { rows, fileBase64, totalRows: rows.length },
         })
       } else {
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -228,22 +236,20 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       let res: UploadResult
 
       if (uploadType === 'defect_analysis' && preview.defectAnalysisData) {
-        // 배치 처리 — BATCH_SIZE행씩 나눠 순차 호출 (Vercel 60초 타임아웃 방지)
-        const allRows = preview.defectAnalysisData.rows
-        const batches: DefectAnalysisRow[][] = []
-        for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
-          batches.push(allRows.slice(i, i + BATCH_SIZE))
-        }
+        // 파일 base64를 서버에 전달 → 서버에서 파싱+배치 처리
+        // (rows 배열 직렬화로 인한 Vercel 응답 크기 제한 우회)
+        const { fileBase64, totalRows } = preview.defectAnalysisData
+        const totalBatches = Math.ceil(totalRows / BATCH_SIZE)
 
         let totalSuccess = 0
         let totalFail = 0
         const allErrors: string[] = []
 
-        setBatchProgress({ current: 0, total: batches.length, done: 0, fail: 0 })
+        setBatchProgress({ current: 0, total: totalBatches, done: 0, fail: 0 })
 
-        for (let bi = 0; bi < batches.length; bi++) {
-          setBatchProgress({ current: bi + 1, total: batches.length, done: totalSuccess, fail: totalFail })
-          const batchRes = await uploadDefectAnalysisBatch(batches[bi], bi, batches.length)
+        for (let bi = 0; bi < totalBatches; bi++) {
+          setBatchProgress({ current: bi + 1, total: totalBatches, done: totalSuccess, fail: totalFail })
+          const batchRes = await uploadDefectAnalysisFromFile(fileBase64, bi * BATCH_SIZE, BATCH_SIZE)
           totalSuccess += batchRes.successCount
           totalFail += batchRes.failCount
           if (batchRes.errors.length > 0) allErrors.push(...batchRes.errors)
@@ -252,7 +258,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
         setBatchProgress(null)
         res = {
           success: totalSuccess > 0,
-          totalRows: allRows.length,
+          totalRows,
           successCount: totalSuccess,
           failCount: totalFail,
           errors: allErrors.slice(0, 20),

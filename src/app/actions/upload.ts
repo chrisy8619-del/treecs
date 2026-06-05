@@ -841,23 +841,88 @@ export async function uploadDefectAnalysis(
   }
 }
 
-// 배치 단위 업로드 — 클라이언트에서 BATCH_SIZE 행씩 잘라 호출
-// Vercel 서버리스 60초 제한 대응: 50행 × n번 호출로 타임아웃 방지
+// 배치 단위 업로드 — rows 배열을 받아 처리 (기존 호환용)
 export async function uploadDefectAnalysisBatch(
   rows: DefectAnalysisRow[],
-  batchIndex: number,    // 0-based 배치 번호 (로그용)
-  totalBatches: number,  // 전체 배치 수 (로그용)
+  batchIndex: number,
+  totalBatches: number,
 ): Promise<UploadResult> {
   const result = await uploadDefectAnalysis(rows)
-
-  // 마지막 배치에서만 revalidate (중간 배치는 생략해 속도 향상)
   if (batchIndex === totalBatches - 1) {
     revalidatePath('/analytics')
     revalidatePath('/plantings')
     revalidatePath('/settings')
     revalidatePath('/dashboard')
   }
-
   return result
+}
+
+// 파일 기반 업로드 — 클라이언트가 엑셀 파일(base64)을 전달하면
+// 서버에서 파싱 + 배치 처리를 모두 수행 (Vercel 응답 크기 제한 우회)
+export async function uploadDefectAnalysisFromFile(
+  fileBase64: string,  // btoa(binary) 로 인코딩된 xlsx 파일
+  batchOffset: number, // 처리 시작 행 인덱스 (0, 50, 100, ...)
+  batchSize: number,   // 처리할 행 수
+): Promise<UploadResult & { totalRowCount: number }> {
+  // base64 → Uint8Array
+  const binary = atob(fileBase64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+  // xlsx 동적 import (서버 전용)
+  const XLSX = await import('xlsx')
+  const wb = XLSX.read(bytes, { type: 'array' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+
+  // 컬럼명 공백 trim + 값 trim
+  const rawAll: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: null })
+  const allRows: DefectAnalysisRow[] = rawAll
+    .map((r) => {
+      const cleaned: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(r)) {
+        cleaned[k.trim()] = typeof v === 'string' ? v.trim() : v
+      }
+      return cleaned
+    })
+    .filter((r) => r['현장명'] || r['현장코드'] || r['수종명'])
+    .map((r) => ({
+      날짜: r['날짜'] as string | number | undefined ?? undefined,
+      현장코드: r['현장코드'] != null ? String(r['현장코드']).trim() : undefined,
+      현장명: r['현장명'] != null ? String(r['현장명']).trim() : undefined,
+      준공일: r['준공일'] as string | number | undefined ?? undefined,
+      식재시기: r['식재시기'] as string | number | undefined ?? undefined,
+      협력사: r['협력사'] != null ? String(r['협력사']).trim() : undefined,
+      수종명: r['수종명'] != null ? String(r['수종명']).trim() : undefined,
+      '수고 H(m)': safeNum(r['수고 H(m)']) ?? undefined,
+      '수관폭 W(m)': safeNum(r['수관폭 W(m)']) ?? undefined,
+      '흉고직경 B(cm)': safeNum(r['흉고직경 B(cm)']) ?? undefined,
+      '근원직경 R(cm)': safeNum(r['근원직경 R(cm)']) ?? undefined,
+      수량: safeNum(r['수량']) ?? undefined,
+      하자수량: safeNum(r['하자수량']) ?? undefined,
+      지역: r['지역'] != null ? String(r['지역']).trim() : undefined,
+      단가: parseUnitPrice(r['단가']) ?? undefined,
+      '계절(수식)': r['계절(수식)'] != null ? String(r['계절(수식)']).trim() : undefined,
+      규격: r['규격'] != null ? String(r['규격']).trim() : undefined,
+      리스크등급: r['리스크등급'] != null ? String(r['리스크등급']).trim() : undefined,
+      권장조치: r['권장조치'] != null ? String(r['권장조치']).trim() : undefined,
+      세부조치: r['세부조치'] != null ? String(r['세부조치']).trim() : undefined,
+      '예상 예비비(₩)': safeNum(r['예상 예비비(₩)']) ?? undefined,
+      '예상 예비비(d)': safeNum(r['예상 예비비(d)']) ?? undefined,
+    }))
+
+  const totalRowCount = allRows.length
+  const batch = allRows.slice(batchOffset, batchOffset + batchSize)
+  const isLast = batchOffset + batchSize >= totalRowCount
+
+  const result = await uploadDefectAnalysis(batch)
+
+  if (isLast) {
+    revalidatePath('/analytics')
+    revalidatePath('/plantings')
+    revalidatePath('/settings')
+    revalidatePath('/dashboard')
+  }
+
+  return { ...result, totalRowCount }
 }
 

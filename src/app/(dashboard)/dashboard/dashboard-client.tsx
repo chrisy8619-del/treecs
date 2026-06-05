@@ -14,7 +14,7 @@ import {
   RefreshCw, Upload, TrendingUp, Coins, TreePine, Leaf,
   Target, Search, FileDown, ChevronLeft, ChevronRight,
 } from 'lucide-react'
-import { uploadDefectAnalysisBatch, type DefectAnalysisRow } from '@/app/actions/upload'
+import { uploadDefectAnalysisFromFile, type DefectAnalysisRow } from '@/app/actions/upload'
 import { BATCH_SIZE } from '@/lib/upload-config'
 
 // ─── 타입 ────────────────────────────────────────────────
@@ -327,8 +327,7 @@ export function DashboardClient({ sites, allPlantings }: Props) {
     reader.onload = (ev) => {
       const data = new Uint8Array(ev.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array' })
-      const sheetName = workbook.SheetNames[0]
-      const sheet = workbook.Sheets[sheetName]
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const { rows } = parseDefectSheet(sheet)
 
       if (rows.length === 0) {
@@ -341,19 +340,20 @@ export function DashboardClient({ sites, allPlantings }: Props) {
         return
       }
 
-      startTransition(async () => {
-        // 배치 처리 — BATCH_SIZE행씩 나눠 순차 호출
-        const batches: DefectAnalysisRow[][] = []
-        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-          batches.push(rows.slice(i, i + BATCH_SIZE))
-        }
+      // 파일을 base64로 인코딩 (서버 전달용)
+      let binary = ''
+      data.forEach((b) => { binary += String.fromCharCode(b) })
+      const fileBase64 = btoa(binary)
+      const totalRows = rows.length
+      const totalBatches = Math.ceil(totalRows / BATCH_SIZE)
 
+      startTransition(async () => {
         let totalSuccess = 0
         let totalFail = 0
 
-        for (let bi = 0; bi < batches.length; bi++) {
-          setBatchProgress({ current: bi + 1, total: batches.length })
-          const batchRes = await uploadDefectAnalysisBatch(batches[bi], bi, batches.length)
+        for (let bi = 0; bi < totalBatches; bi++) {
+          setBatchProgress({ current: bi + 1, total: totalBatches })
+          const batchRes = await uploadDefectAnalysisFromFile(fileBase64, bi * BATCH_SIZE, BATCH_SIZE)
           totalSuccess += batchRes.successCount
           totalFail += batchRes.failCount
         }
