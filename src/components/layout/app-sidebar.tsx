@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   TreePine,
-  ClipboardList,
   BarChart3,
   Building2,
   Users,
@@ -29,16 +28,15 @@ import {
 import { logout } from '@/app/actions/auth'
 
 const navMain = [
+  { title: '대시보드', href: '/analytics', icon: BarChart3 },
   { title: '현장 하자율 예측 분석', href: '/dashboard', icon: LayoutDashboard },
-  { title: '점검 관리', href: '/inspections', icon: ClipboardList },
-  { title: '식재 기록', href: '/plantings', icon: TreePine },
-  { title: '분석', href: '/analytics', icon: BarChart3 },
 ]
 
 const navMaster = [
   { title: '현장 관리', href: '/sites', icon: Building2 },
   { title: '시공사 관리', href: '/contractors', icon: Users },
   { title: '수종 관리', href: '/species', icon: Leaf },
+  { title: '식재 기록', href: '/plantings', icon: TreePine },
   { title: '설정', href: '/settings', icon: Settings },
 ]
 
