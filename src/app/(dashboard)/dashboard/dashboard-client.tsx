@@ -278,11 +278,11 @@ export function DashboardClient({ sites }: Props) {
 
   // 드롭다운 필터
   const codeMatches = useMemo(
-    () => sites.filter((s) => s.site_code.toLowerCase().includes(codeInput.toLowerCase())).slice(0, 10),
+    () => sites.filter((s) => s.site_code.toLowerCase().includes(codeInput.toLowerCase())),
     [sites, codeInput]
   )
   const nameMatches = useMemo(
-    () => sites.filter((s) => s.site_name.toLowerCase().includes(nameInput.toLowerCase())).slice(0, 10),
+    () => sites.filter((s) => s.site_name.toLowerCase().includes(nameInput.toLowerCase())),
     [sites, nameInput]
   )
 
