@@ -196,9 +196,12 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
         const { rows, rawRows } = parseDefectAnalysisExcel(sheet)
 
-        // 파일을 base64로 인코딩해서 저장 (서버 전송용)
+        // 파일을 base64로 안전 인코딩 (btoa는 바이트>127 에서 오류 — 청크 방식 사용)
+        const CHUNK = 8192
         let binary = ''
-        data.forEach((b) => { binary += String.fromCharCode(b) })
+        for (let i = 0; i < data.length; i += CHUNK) {
+          binary += String.fromCharCode(...Array.from(data.subarray(i, i + CHUNK)))
+        }
         const fileBase64 = btoa(binary)
 
         const headers = ['현장코드', '현장명', '수종명', '수량', '하자수량', '하자율', '단가', '예상예비비', '리스크등급', '협력사']

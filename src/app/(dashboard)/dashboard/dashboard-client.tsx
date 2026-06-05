@@ -341,8 +341,12 @@ export function DashboardClient({ sites, allPlantings }: Props) {
       }
 
       // 파일을 base64로 인코딩 (서버 전달용)
+      // btoa는 바이트>127에서 오류 — 청크 방식으로 안전하게 base64 변환
+      const CHUNK = 8192
       let binary = ''
-      data.forEach((b) => { binary += String.fromCharCode(b) })
+      for (let i = 0; i < data.length; i += CHUNK) {
+        binary += String.fromCharCode(...Array.from(data.subarray(i, i + CHUNK)))
+      }
       const fileBase64 = btoa(binary)
       const totalRows = rows.length
       const totalBatches = Math.ceil(totalRows / BATCH_SIZE)

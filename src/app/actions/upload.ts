@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { SEASON_KO_TO_CODE } from '@/lib/season-utils'
 import { BATCH_SIZE } from '@/lib/upload-config'
+import * as XLSX from 'xlsx'
 
 export type UploadResult = {
   success: boolean
@@ -869,8 +870,6 @@ export async function uploadDefectAnalysisFromFile(
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
 
-  // xlsx 동적 import (서버 전용)
-  const XLSX = await import('xlsx')
   const wb = XLSX.read(bytes, { type: 'array' })
   const ws = wb.Sheets[wb.SheetNames[0]]
 
