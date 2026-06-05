@@ -74,131 +74,127 @@ function recommendedAction(rate: number | null): string {
   return '유지 관리'
 }
 
-// 엑셀 셀값 읽기
-function getCellVal(sheet: XLSX.WorkSheet, addr: string) {
-  const cell = sheet[addr]
-  return cell ? cell.v : null
+// 숫자 안전 변환
+function safeNum(v: unknown): number | undefined {
+  if (v == null || v === '') return undefined
+  const n = Number(v)
+  return isNaN(n) ? undefined : n
 }
 
-// 하자율 예측 분석 시트 파싱
+// 하자율 예측 분석 시트 파싱 (새 flat 테이블 구조)
+// 1행: 헤더, 2행~: 데이터
+// 컬럼 순서: 날짜(A), 현장코드(B), 현장명(C), 준공일(D), 식재시기(E), 협력사(F),
+//            수종명(G), 수고 H(m)(H), 수관폭 W(m)(I), 흉고직경 B(cm)(J), 근원직경 R(cm)(K),
+//            수량(L), 하자수량(M), 지역(N), 단가(O), 계절(수식)(P), 규격(Q),
+//            리스크등급(R), 권장조치(S), 세부조치(T), 예상 예비비(d)(U)
 function parseDefectSheet(sheet: XLSX.WorkSheet): {
-  headerInfo: { site_code: string; site_name: string; completion_date: unknown; planting_date: unknown; contractor_name: string; region: string }
   rows: DefectAnalysisRow[]
 } {
-  const headerInfo = {
-    site_code: String(getCellVal(sheet, 'C2') ?? '').trim(),
-    site_name: String(getCellVal(sheet, 'C3') ?? '').trim(),
-    completion_date: getCellVal(sheet, 'F2'),
-    planting_date: getCellVal(sheet, 'F3'),
-    contractor_name: String(getCellVal(sheet, 'J2') ?? '').trim(),
-    region: String(getCellVal(sheet, 'J3') ?? '').trim(),
-  }
+  // sheet_to_json으로 헤더 기반 파싱 (컬럼명 그대로 키로 사용)
+  const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: null })
 
-  // 컬럼 매핑 (양식 헤더 기준):
-  // A=번호, B=수종명, C=수량, D=수고H, E=수관폭W, F=흉고B, G=근원R,
-  // H=단가, I=예상하자율, J=예상하자수량, K=예상예비비, L=리스크등급, M=권장조치, N=세부조치, O=비고
-  const rows: DefectAnalysisRow[] = []
-  for (let r = 13; r <= 62; r++) {
-    const speciesName = getCellVal(sheet, `B${r}`)
-    if (!speciesName || String(speciesName).trim() === '') break
+  const rows: DefectAnalysisRow[] = raw
+    .filter((r) => r['현장코드'] || r['수종명']) // 빈 행 제거
+    .map((r) => ({
+      날짜: r['날짜'] as string | number | undefined ?? undefined,
+      현장코드: r['현장코드'] != null ? String(r['현장코드']).trim() : undefined,
+      현장명: r['현장명'] != null ? String(r['현장명']).trim() : undefined,
+      준공일: r['준공일'] as string | number | undefined ?? undefined,
+      식재시기: r['식재시기'] as string | number | undefined ?? undefined,
+      협력사: r['협력사'] != null ? String(r['협력사']).trim() : undefined,
+      수종명: r['수종명'] != null ? String(r['수종명']).trim() : undefined,
+      '수고 H(m)': safeNum(r['수고 H(m)']),
+      '수관폭 W(m)': safeNum(r['수관폭 W(m)']),
+      '흉고직경 B(cm)': safeNum(r['흉고직경 B(cm)']),
+      '근원직경 R(cm)': safeNum(r['근원직경 R(cm)']),
+      수량: safeNum(r['수량']),
+      하자수량: safeNum(r['하자수량']),
+      지역: r['지역'] != null ? String(r['지역']).trim() : undefined,
+      단가: safeNum(r['단가']),
+      '계절(수식)': r['계절(수식)'] != null ? String(r['계절(수식)']).trim() : undefined,
+      규격: r['규격'] != null ? String(r['규격']).trim() : undefined,
+      리스크등급: r['리스크등급'] != null ? String(r['리스크등급']).trim() : undefined,
+      권장조치: r['권장조치'] != null ? String(r['권장조치']).trim() : undefined,
+      세부조치: r['세부조치'] != null ? String(r['세부조치']).trim() : undefined,
+      '예상 예비비(₩)': safeNum(r['예상 예비비(₩)']),
+      '예상 예비비(d)': safeNum(r['예상 예비비(d)']),
+    }))
 
-    const rawRate = getCellVal(sheet, `I${r}`)
-    let defectRate: number | undefined
-    if (rawRate != null) {
-      const n = Number(rawRate)
-      if (!isNaN(n)) defectRate = n
-    }
-
-    rows.push({
-      현장코드: headerInfo.site_code,
-      현장명: headerInfo.site_name,
-      준공일: headerInfo.completion_date as string | number | undefined,
-      식재시기: headerInfo.planting_date as string | number | undefined,
-      시공사: headerInfo.contractor_name,
-      지역: headerInfo.region,
-      수종명: String(speciesName).trim(),
-      수량: getCellVal(sheet, `C${r}`) != null ? Number(getCellVal(sheet, `C${r}`)) : undefined,
-      수고H: getCellVal(sheet, `D${r}`) != null ? Number(getCellVal(sheet, `D${r}`)) : undefined,
-      수관폭W: getCellVal(sheet, `E${r}`) != null ? Number(getCellVal(sheet, `E${r}`)) : undefined,
-      흉고직경B: getCellVal(sheet, `F${r}`) != null ? Number(getCellVal(sheet, `F${r}`)) : undefined,
-      근원직경R: getCellVal(sheet, `G${r}`) != null ? Number(getCellVal(sheet, `G${r}`)) : undefined,
-      단가: getCellVal(sheet, `H${r}`) != null ? Number(getCellVal(sheet, `H${r}`)) : undefined,
-      예상하자율: defectRate,
-      예상하자수량: getCellVal(sheet, `J${r}`) != null ? Number(getCellVal(sheet, `J${r}`)) : undefined,
-      예상예비비: getCellVal(sheet, `K${r}`) != null ? Number(getCellVal(sheet, `K${r}`)) : undefined,
-      리스크등급: getCellVal(sheet, `L${r}`) != null ? String(getCellVal(sheet, `L${r}`)) : undefined,
-      비고: getCellVal(sheet, `O${r}`) != null ? String(getCellVal(sheet, `O${r}`)) : undefined,
-    })
-  }
-
-  return { headerInfo, rows }
+  return { rows }
 }
 
-// 엑셀 양식 생성 (현장 데이터 포함)
+// 엑셀 양식 생성 (새 flat 구조 — 현장 데이터 포함)
+// 컬럼 순서: 날짜, 현장코드, 현장명, 준공일, 식재시기, 협력사, 수종명,
+//            수고 H(m), 수관폭 W(m), 흉고직경 B(cm), 근원직경 R(cm),
+//            수량, 하자수량, 지역, 단가, 계절(수식), 규격, 리스크등급, 권장조치, 세부조치, 예상 예비비(d)
 function buildTemplateWorkbook(site: SiteOption | null, rows: PlantingRow[]) {
   const wb = XLSX.utils.book_new()
 
-  // 현장 기본 정보
-  const siteName = site?.site_name ?? ''
   const siteCode = site?.site_code ?? ''
+  const siteName = site?.site_name ?? ''
   const region = site?.region ?? ''
   const occupancy = site?.occupancy_date ?? ''
   const startDate = site?.start_date ?? ''
 
-  const aoa: unknown[][] = [
-    ['현장 기본 정보'],
-    ['현장코드', '', siteCode, '', '준공일', occupancy, '', '', '시공사', ''],
-    ['현장명', '', siteName, '', '식재시기', startDate, '', '', '지역', region],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    // 행 12: 헤더
-    ['번호', '수종명', '수량', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)',
-      '단가(자동,W)', '예상하자율', '예상 하자수량', '예상 예비비(W)', '리스크 등급', '권장 조치', '세부 조치(필요시 입력)', '비고'],
+  const HEADERS = [
+    '날짜', '현장코드', '현장명', '준공일', '식재시기', '협력사',
+    '수종명', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)',
+    '수량', '하자수량', '지역', '단가', '계절(수식)', '규격',
+    '리스크등급', '권장조치', '세부조치', '예상 예비비(₩)',
   ]
 
-  // 데이터 행 (13번째 행부터, index 12)
-  rows.forEach((row, idx) => {
-    const r = 13 + idx
-    aoa.push([
-      idx + 1,
-      row.species_name ?? '',
-      row.quantity_planted,
-      row.height_m ?? '',
-      row.width_m ?? '',
-      row.caliper ?? '',
-      row.rootball_r ?? '',
-      row.unit_price ?? '',
-      row.expected_defect_rate != null ? row.expected_defect_rate : '',
-      { f: `ROUND(C${r}*I${r},0)` },
-      { f: `H${r}*J${r}` },
-      { f: `IF(I${r}>=0.2,"고위험",IF(I${r}>=0.1,"중위험","저위험"))` },
-      recommendedAction(row.expected_defect_rate),
-      '',
-      row.notes ?? '',
-    ])
-  })
+  const aoa: unknown[][] = [HEADERS]
 
-  // 데이터 없으면 빈 샘플 1행
-  if (rows.length === 0) {
-    aoa.push([1, '수종명 입력', 100, 2.0, 1.5, '', 8, 55000, 0.1052,
-      { f: 'ROUND(C13*I13,0)' }, { f: 'H13*J13' },
-      { f: 'IF(I13>=0.2,"고위험",IF(I13>=0.1,"중위험","저위험"))' },
-      '모니터링 강화', '', ''])
+  if (rows.length > 0) {
+    rows.forEach((row) => {
+      const qty = row.quantity_planted
+      const defectQty = row.expected_defect_qty ?? ''
+      const rate = row.expected_defect_rate
+      const riskLabel = rate != null
+        ? (rate >= 0.2 ? '고위험' : rate >= 0.1 ? '중위험' : '저위험')
+        : ''
+
+      aoa.push([
+        '',           // 날짜
+        siteCode,
+        siteName,
+        occupancy,
+        startDate,
+        '',           // 협력사
+        row.species_name ?? '',
+        row.height_m ?? '',
+        row.width_m ?? '',
+        row.caliper ?? '',
+        row.rootball_r ?? '',
+        qty,
+        defectQty,
+        region,
+        row.unit_price ?? '',
+        '',           // 계절(수식)
+        [row.height_m ? `H${row.height_m}` : '', row.width_m ? `W${row.width_m}` : '', row.caliper ? `B${row.caliper}` : '', row.rootball_r ? `R${row.rootball_r}` : ''].filter(Boolean).join('×') || '',
+        riskLabel,
+        recommendedAction(rate),
+        row.notes ?? '',
+        row.expected_reserve_cost ?? '',
+      ])
+    })
+  } else {
+    // 빈 샘플 1행
+    aoa.push([
+      '', siteCode, siteName, occupancy, startDate, '',
+      '수종명 입력', 2.0, 1.5, '', 8, 100, '', region, 55000, '', 'H2.0×W1.5×R8',
+      '', '모니터링 강화', '', '',
+    ])
   }
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!cols'] = [
-    { wch: 6 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 10 },
-    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-    { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+    { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+    { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 },
+    { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 14 },
   ]
-  XLSX.utils.book_append_sheet(wb, ws, '신규현장_하자율 예측분석')
+  XLSX.utils.book_append_sheet(wb, ws, '하자율 예측분석')
   return wb
 }
 
@@ -312,26 +308,22 @@ export function DashboardClient({ sites, allPlantings }: Props) {
     reader.onload = (ev) => {
       const data = new Uint8Array(ev.target?.result as ArrayBuffer)
       const workbook = XLSX.read(data, { type: 'array' })
-      const sheetName =
-        workbook.SheetNames.find((n) => n.includes('하자율') || n.includes('예측')) ??
-        workbook.SheetNames[0]
+      const sheetName = workbook.SheetNames[0]
       const sheet = workbook.Sheets[sheetName]
-      const { headerInfo, rows } = parseDefectSheet(sheet)
+      const { rows } = parseDefectSheet(sheet)
 
-      if (!headerInfo.site_code) {
-        setUploadStatus({ type: 'error', msg: '현장코드(C6)를 찾을 수 없습니다. 양식을 확인하세요.' })
+      if (rows.length === 0) {
+        setUploadStatus({ type: 'error', msg: '수목 데이터가 없습니다. 헤더 행(1행) 이후에 데이터를 입력하세요.' })
         return
       }
-      if (rows.length === 0) {
-        setUploadStatus({ type: 'error', msg: '수목 데이터가 없습니다. 13행부터 데이터를 입력하세요.' })
+      const hasSiteCode = rows.some((r) => r.현장코드)
+      if (!hasSiteCode) {
+        setUploadStatus({ type: 'error', msg: '현장코드 컬럼이 없거나 모두 비어 있습니다. 양식을 확인하세요.' })
         return
       }
 
       startTransition(async () => {
-        const res = await uploadDefectAnalysis(
-          headerInfo as Parameters<typeof uploadDefectAnalysis>[0],
-          rows
-        )
+        const res = await uploadDefectAnalysis(rows)
         if (res.success) {
           setUploadStatus({ type: 'success', msg: `${res.successCount}건 업로드 완료${res.failCount > 0 ? ` (${res.failCount}건 실패)` : ''} — 새로고침 중...` })
           setTimeout(() => window.location.reload(), 1200)

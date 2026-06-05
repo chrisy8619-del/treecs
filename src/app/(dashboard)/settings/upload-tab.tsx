@@ -38,7 +38,7 @@ const UPLOAD_TYPES: { value: UploadType; label: string; description: string; col
     value: 'defect_analysis',
     label: '하자율 예측 분석',
     description: '현장별 수목 명세와 단가·예상하자율을 업로드합니다. 예비비가 자동 계산됩니다.',
-    columns: ['현장코드', '현장명', '준공일', '식재시기', '시공사', '협력사', '지역', '수종명', '수량', '수고H', '수관폭W', '흉고직경B', '근원직경R', '단가', '예상하자율', '비고'],
+    columns: ['날짜', '현장코드', '현장명', '준공일', '식재시기', '협력사', '수종명', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)', '수량', '하자수량', '지역', '단가', '계절(수식)', '규격', '리스크등급', '권장조치', '세부조치', '예상 예비비(₩)'],
   },
   {
     value: 'planting',
@@ -65,96 +65,75 @@ const statusLabel: Record<string, string> = {
   failed: '실패',
 }
 
-// 하자율 예측 엑셀에서 헤더 정보(현장 기본 정보)를 파싱
-// 이미지 기준: B6=현장코드값(C6), B7=현장명값(C7), D6=준공일(E6), D7=식재시기(E7),
-//              H6=시공사(I6), H7=지역(I7)
+// 숫자 안전 변환
+function safeNum(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return isNaN(n) ? null : n
+}
+
+// 하자율 예측 엑셀 파싱 (새 flat 테이블 구조)
+// 1행: 헤더 컬럼명, 2행~: 실제 데이터
 function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
-  headerInfo: {
-    site_code: string
-    site_name: string
-    completion_date: string | number | null
-    planting_date: string | number | null
-    contractor_name: string
-    region: string
-  }
   rows: DefectAnalysisRow[]
   rawRows: PreviewRow[]
 } {
-  // 현장 기본 정보 파싱 (행 기반)
-  const getCellVal = (addr: string) => {
-    const cell = sheet[addr]
-    return cell ? cell.v : null
-  }
+  const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: null })
 
-  // 헤더 정보 추출 (엑셀 템플릿 고정 위치 기준)
-  const headerInfo = {
-    site_code: String(getCellVal('C6') ?? '').trim(),
-    site_name: String(getCellVal('C7') ?? '').trim(),
-    completion_date: getCellVal('E6'),
-    planting_date: getCellVal('E7'),
-    contractor_name: String(getCellVal('I6') ?? '').trim(),
-    region: String(getCellVal('I7') ?? '').trim(),
-  }
-
-  // 수목 명세 파싱 (B12가 헤더행, B13부터 데이터)
-  // 헤더: B=번호, C=수종명, D=수량, E=수고H, F=수관폭W, G=흉고직경B, H=근원직경R,
-  //        I=단가, J=예상하자율, K=예상하자수량, L=예상예비비, M=리스크등급, N=권장조치, O=세부조치, P=비고
   const rows: DefectAnalysisRow[] = []
   const rawRows: PreviewRow[] = []
 
-  for (let r = 12; r <= 62; r++) {
-    const speciesName = getCellVal(`C${r}`)
-    if (!speciesName || String(speciesName).trim() === '') break
+  for (const r of raw) {
+    const siteCode = r['현장코드'] != null ? String(r['현장코드']).trim() : ''
+    const speciesName = r['수종명'] != null ? String(r['수종명']).trim() : ''
+    if (!siteCode && !speciesName) continue // 완전 빈 행 스킵
 
-    const rawRate = getCellVal(`J${r}`)
-    // 엑셀에서 하자율이 퍼센트 서식(0.18 = 18%)이거나 정수(18)일 수 있음
-    let defectRate: number | undefined
-    if (rawRate != null) {
-      const n = Number(rawRate)
-      if (!isNaN(n)) defectRate = n
-    }
-
-    // K열=예상하자수량, L열=예상예비비, M열=리스크등급, N열=권장조치, P열=비고
-    const excelDefectQty = getCellVal(`K${r}`)
-    const excelReserveCost = getCellVal(`L${r}`)
-    const excelRiskLevel = getCellVal(`M${r}`)
+    const qty = safeNum(r['수량'])
+    const defectQty = safeNum(r['하자수량'])
+    // 하자율 = 하자수량 / 수량 (표시용)
+    const defectRatePct = qty && defectQty != null ? ((defectQty / qty) * 100).toFixed(2) + '%' : null
+    const reserveCost = safeNum(r['예상 예비비(₩)']) ?? safeNum(r['예상 예비비(₩)'])
 
     const row: DefectAnalysisRow = {
-      현장코드: headerInfo.site_code,
-      현장명: headerInfo.site_name,
-      준공일: headerInfo.completion_date ?? undefined,
-      식재시기: headerInfo.planting_date ?? undefined,
-      시공사: headerInfo.contractor_name,
-      지역: headerInfo.region,
-      수종명: String(speciesName).trim(),
-      수량: getCellVal(`D${r}`) != null ? Number(getCellVal(`D${r}`)) : undefined,
-      수고H: getCellVal(`E${r}`) != null ? Number(getCellVal(`E${r}`)) : undefined,
-      수관폭W: getCellVal(`F${r}`) != null ? Number(getCellVal(`F${r}`)) : undefined,
-      흉고직경B: getCellVal(`G${r}`) != null ? Number(getCellVal(`G${r}`)) : undefined,
-      근원직경R: getCellVal(`H${r}`) != null ? Number(getCellVal(`H${r}`)) : undefined,
-      단가: getCellVal(`I${r}`) != null ? Number(getCellVal(`I${r}`)) : undefined,
-      예상하자율: defectRate,
-      예상하자수량: excelDefectQty != null ? Number(excelDefectQty) : undefined,
-      예상예비비: excelReserveCost != null ? Number(excelReserveCost) : undefined,
-      리스크등급: excelRiskLevel != null ? String(excelRiskLevel) : undefined,
-      비고: getCellVal(`P${r}`) != null ? String(getCellVal(`P${r}`)) : undefined,
+      날짜: r['날짜'] as string | number | undefined ?? undefined,
+      현장코드: siteCode || undefined,
+      현장명: r['현장명'] != null ? String(r['현장명']).trim() : undefined,
+      준공일: r['준공일'] as string | number | undefined ?? undefined,
+      식재시기: r['식재시기'] as string | number | undefined ?? undefined,
+      협력사: r['협력사'] != null ? String(r['협력사']).trim() : undefined,
+      수종명: speciesName || undefined,
+      '수고 H(m)': safeNum(r['수고 H(m)']) ?? undefined,
+      '수관폭 W(m)': safeNum(r['수관폭 W(m)']) ?? undefined,
+      '흉고직경 B(cm)': safeNum(r['흉고직경 B(cm)']) ?? undefined,
+      '근원직경 R(cm)': safeNum(r['근원직경 R(cm)']) ?? undefined,
+      수량: qty ?? undefined,
+      하자수량: defectQty ?? undefined,
+      지역: r['지역'] != null ? String(r['지역']).trim() : undefined,
+      단가: safeNum(r['단가']) ?? undefined,
+      '계절(수식)': r['계절(수식)'] != null ? String(r['계절(수식)']).trim() : undefined,
+      규격: r['규격'] != null ? String(r['규격']).trim() : undefined,
+      리스크등급: r['리스크등급'] != null ? String(r['리스크등급']).trim() : undefined,
+      권장조치: r['권장조치'] != null ? String(r['권장조치']).trim() : undefined,
+      세부조치: r['세부조치'] != null ? String(r['세부조치']).trim() : undefined,
+      '예상 예비비(₩)': reserveCost ?? undefined,
+      '예상 예비비(d)': safeNum(r['예상 예비비(d)']) ?? undefined,
     }
     rows.push(row)
     rawRows.push({
-      수종명: row.수종명 ?? null,
-      수량: row.수량 ?? null,
-      수고H: row.수고H ?? null,
-      수관폭W: row.수관폭W ?? null,
+      현장코드: siteCode || null,
+      현장명: row.현장명 ?? null,
+      수종명: speciesName || null,
+      수량: qty,
+      하자수량: defectQty,
+      하자율: defectRatePct,
       단가: row.단가 ?? null,
-      예상하자율: defectRate != null ? `${(defectRate > 1 ? defectRate : defectRate * 100).toFixed(2)}%` : null,
-      예상하자수량: excelDefectQty != null ? Number(excelDefectQty) : null,
-      예상예비비: excelReserveCost != null ? `₩${Number(excelReserveCost).toLocaleString()}` : null,
-      리스크등급: excelRiskLevel != null ? String(excelRiskLevel) : null,
-      비고: row.비고 ?? null,
+      예상예비비: reserveCost != null ? `₩${reserveCost.toLocaleString()}` : null,
+      리스크등급: row.리스크등급 ?? null,
+      협력사: row.협력사 ?? null,
     })
   }
 
-  return { headerInfo, rows, rawRows }
+  return { rows, rawRows }
 }
 
 export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
@@ -167,7 +146,6 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
     rows: PreviewRow[]
     allRows: PreviewRow[]
     defectAnalysisData?: {
-      headerInfo: ReturnType<typeof parseDefectAnalysisExcel>['headerInfo']
       rows: DefectAnalysisRow[]
     }
   } | null>(null)
@@ -190,19 +168,15 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       const workbook = XLSX.read(data, { type: 'array' })
 
       if (uploadType === 'defect_analysis') {
-        // 하자율 예측 분석 시트 탐색 ('신규현장_하자율 예측분석' 또는 첫 번째 시트)
-        const sheetName =
-          workbook.SheetNames.find((n) => n.includes('하자율') || n.includes('예측')) ??
-          workbook.SheetNames[0]
-        const sheet = workbook.Sheets[sheetName]
-        const { headerInfo, rows, rawRows } = parseDefectAnalysisExcel(sheet)
+        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        const { rows, rawRows } = parseDefectAnalysisExcel(sheet)
 
-        const headers = ['수종명', '수량', '수고H', '수관폭W', '단가', '예상하자율', '예상하자수량', '예상예비비', '리스크등급', '비고']
+        const headers = ['현장코드', '현장명', '수종명', '수량', '하자수량', '하자율', '단가', '예상예비비', '리스크등급', '협력사']
         setPreview({
           headers,
           rows: rawRows.slice(0, 5),
           allRows: rawRows,
-          defectAnalysisData: { headerInfo, rows },
+          defectAnalysisData: { rows },
         })
       } else {
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -232,8 +206,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       let res: UploadResult
 
       if (uploadType === 'defect_analysis' && preview.defectAnalysisData) {
-        const { headerInfo, rows } = preview.defectAnalysisData
-        res = await uploadDefectAnalysis(headerInfo, rows)
+        res = await uploadDefectAnalysis(preview.defectAnalysisData.rows)
       } else if (uploadType === 'planting') {
         res = await uploadPlantingRecords(preview.allRows as never)
       } else {
@@ -256,42 +229,28 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
 
   function downloadTemplate() {
     if (uploadType === 'defect_analysis') {
-      // 하자율 예측 분석 템플릿 — 이미지 기준 열 구성 반영
-      const aoa = [
-        // 행 1 (현장 기본 정보 제목 행 — 병합 표현은 xlsx에서 생략)
-        ['현장 기본 정보'],
-        // 행 2 (row index 1)
-        ['현장코드', '', '준공일', '', '', '', '시공사', '', '협력사', ''],
-        // 행 3 (row index 2)
-        ['현장명', '', '식재시기', '', '', '', '지역', '', '총 수량', '예상 하자율', '총 예비비'],
-        // 행 4 (row index 3)
-        ['비고'],
-        // 행 5 — 빈 행
-        [],
-        // 행 6 — 리스크 판정 소계행 (빈 행으로 처리)
-        [],
-        // 행 7 — 전체 리스크 판정 헤더
-        ['전체 리스크 판정', '', '', '', '중위험 - 주의 관리 필요'],
-        // 행 8 — 고위험/중위험/지위험 카운트 (설명용)
-        ['고위험:0종', '', '중위험:0종', '', '지위험:0종', '', '단가 자동매칭:0건'],
-        // 행 9 (row index 8) — 열 헤더 (row 12 위치에 맞추기 위해 빈 행 추가)
-        [],
-        [],
-        [],
-        // 행 12 (row index 11) — 실제 열 헤더
-        ['번호', '수종명', '수량', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)', '단가(자동,W)', '예상하자율', '예상 하자수량', '예상 예비비(W)', '리스크 등급', '권장 조치', '세부 조치(필요시 입력)', '비고'],
-        // 행 13~ — 샘플 데이터 1행
-        [1, '수종명 입력', 100, 2.0, 1.5, '', 8, 55000, '10%', '=ROUND(C13*I13,0)', '=H13*J13', '=IF(I13>=0.2,"고위험",IF(I13>=0.1,"중위험","저위험"))', '모니터링', '', ''],
+      // 새 flat 구조 양식 (1행 헤더 + 샘플 데이터 1행)
+      const HEADERS = [
+        '날짜', '현장코드', '현장명', '준공일', '식재시기', '협력사',
+        '수종명', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)',
+        '수량', '하자수량', '지역', '단가', '계절(수식)', '규격',
+        '리스크등급', '권장조치', '세부조치', '예상 예비비(₩)',
       ]
+      const SAMPLE_ROW = [
+        '', 'SITE001', '샘플현장', '2023-03-01', '2023-03-01', '협력사명',
+        '느티나무', 4.5, 3.0, '', 15, 50, 4, '대구', 350000, '봄', 'H4.5×R15',
+        '저위험', '유지 관리', '', 1400000,
+      ]
+      const aoa = [HEADERS, SAMPLE_ROW]
       const ws = XLSX.utils.aoa_to_sheet(aoa)
-      // 열 너비 설정
       ws['!cols'] = [
-        { wch: 6 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 10 },
-        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-        { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+        { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+        { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 },
+        { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 14 },
       ]
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '신규현장_하자율 예측분석')
+      XLSX.utils.book_append_sheet(wb, ws, '하자율 예측분석')
       XLSX.writeFile(wb, '하자율예측분석_양식.xlsx')
     } else {
       const ws = XLSX.utils.aoa_to_sheet([selectedType.columns])
@@ -400,15 +359,16 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       {/* 미리보기 */}
       {preview && (
         <div className="space-y-3">
-          {/* 하자율 예측: 현장 기본 정보 표시 */}
+          {/* 하자율 예측: 데이터 요약 표시 */}
           {preview.defectAnalysisData && (
-            <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm grid grid-cols-3 gap-2">
-              <div><span className="text-muted-foreground">현장코드: </span><span className="font-medium">{preview.defectAnalysisData.headerInfo.site_code || '-'}</span></div>
-              <div><span className="text-muted-foreground">현장명: </span><span className="font-medium">{preview.defectAnalysisData.headerInfo.site_name || '-'}</span></div>
-              <div><span className="text-muted-foreground">시공사: </span><span className="font-medium">{preview.defectAnalysisData.headerInfo.contractor_name || '-'}</span></div>
-              <div><span className="text-muted-foreground">준공일: </span><span className="font-medium">{preview.defectAnalysisData.headerInfo.completion_date ?? '-'}</span></div>
-              <div><span className="text-muted-foreground">식재시기: </span><span className="font-medium">{preview.defectAnalysisData.headerInfo.planting_date ?? '-'}</span></div>
-              <div><span className="text-muted-foreground">지역: </span><span className="font-medium">{preview.defectAnalysisData.headerInfo.region || '-'}</span></div>
+            <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm flex flex-wrap gap-4">
+              <div><span className="text-muted-foreground">총 행수: </span><span className="font-medium">{preview.defectAnalysisData.rows.length}행</span></div>
+              <div><span className="text-muted-foreground">현장코드: </span><span className="font-medium">
+                {[...new Set(preview.defectAnalysisData.rows.map(r => r.현장코드).filter(Boolean))].slice(0, 3).join(', ') || '-'}
+              </span></div>
+              <div><span className="text-muted-foreground">수종 수: </span><span className="font-medium">
+                {new Set(preview.defectAnalysisData.rows.map(r => r.수종명).filter(Boolean)).size}종
+              </span></div>
             </div>
           )}
 

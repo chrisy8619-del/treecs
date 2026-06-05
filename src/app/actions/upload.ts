@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { SEASON_KO_TO_CODE } from '@/lib/season-utils'
 
 export type UploadResult = {
   success: boolean
@@ -34,59 +35,79 @@ type InspectionRow = {
   비고?: string
 }
 
-// 하자율 예측 분석 엑셀 행 타입
-// 헤더: 현장코드, 현장명, 준공일, 식재시기, 시공사, 협력사, 지역,
-//        수종명, 수량, 수고H, 수관폭W, 흉고직경B, 근원직경R,
-//        단가, 예상하자율, 비고
+// 하자율 예측 분석 엑셀 행 타입 (새 flat 테이블 구조 기준)
+// 컬럼: 날짜, 현장코드, 현장명, 준공일, 식재시기, 협력사, 수종명,
+//        수고 H(m), 수관폭 W(m), 흉고직경 B(cm), 근원직경 R(cm),
+//        수량, 하자수량, 지역, 단가, 계절(수식), 규격, 리스크등급, 권장조치, 세부조치, 예상 예비비(d)
 export type DefectAnalysisRow = {
+  날짜?: string | number
   현장코드?: string
   현장명?: string
   준공일?: string | number
   식재시기?: string | number
-  시공사?: string
   협력사?: string
-  지역?: string
   수종명?: string
+  '수고 H(m)'?: number
+  '수관폭 W(m)'?: number
+  '흉고직경 B(cm)'?: number
+  '근원직경 R(cm)'?: number
   수량?: number
-  수고H?: number
-  수관폭W?: number
-  흉고직경B?: number
-  근원직경R?: number
+  하자수량?: number           // 실제 하자수량 (하자율은 하자수량/수량으로 계산)
+  지역?: string
   단가?: number
-  예상하자율?: number     // 0~100 사이 정수 or 0~1 소수 둘 다 허용
-  예상하자수량?: number   // 엑셀 K열 수식 결과값 (없으면 서버에서 재계산)
-  예상예비비?: number     // 엑셀 L열 수식 결과값 (없으면 DB 트리거가 계산)
-  리스크등급?: string     // 엑셀 M열 값 (없으면 DB 트리거가 계산)
-  비고?: string
+  '계절(수식)'?: string
+  규격?: string
+  리스크등급?: string
+  권장조치?: string
+  세부조치?: string
+  '예상 예비비(₩)'?: number  // 새 양식 표기
+  '예상 예비비(d)'?: number  // 구버전 호환
 }
 
-const seasonMap: Record<string, string> = {
-  봄: 'spring', 여름: 'summer', 가을: 'fall', 겨울: 'winter',
-}
-
-// 엑셀 날짜 시리얼 → YYYY-MM-DD 변환
+// 엑셀 날짜 → YYYY-MM-DD 변환 (모든 입력 형식을 일관되게 처리)
+// 지원 형식: YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD, YYYY.MM, YYYY년 MM월, 엑셀 시리얼
 function excelDateToString(val: unknown): string | null {
-  if (!val) return null
+  if (val == null || val === '') return null
+
   if (typeof val === 'string') {
     const s = val.trim()
+    if (!s) return null
+    // YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-    // YYYY.MM 형식 (준공일/식재시기)
-    if (/^\d{4}\.\d{2}$/.test(s)) return `${s.replace('.', '-')}-01`
+    // YYYY/MM/DD
+    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, '-')
+    // YYYY.MM.DD
+    if (/^\d{4}\.\d{2}\.\d{2}$/.test(s)) return s.replace(/\./g, '-')
+    // YYYY.MM 또는 YYYY/MM (연월만)
+    if (/^\d{4}[./]\d{2}$/.test(s)) {
+      const [y, m] = s.split(/[./]/)
+      return `${y}-${m.padStart(2, '0')}-01`
+    }
+    // YYYY년 MM월 또는 YYYY년MM월
+    const yearMonth = s.match(/^(\d{4})년\s*(\d{1,2})월/)
+    if (yearMonth) return `${yearMonth[1]}-${yearMonth[2].padStart(2, '0')}-01`
+    // YYYY-MM (연월만)
+    if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`
+    // 그 외 문자열 → Date 파싱
     const d = new Date(s)
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
     return null
   }
+
   if (typeof val === 'number') {
     // YYYY.MM 숫자 형태 (예: 2022.12)
     if (val > 1900 && val < 2200 && String(val).includes('.')) {
       const [y, m] = String(val).split('.')
       return `${y}-${m.padStart(2, '0')}-01`
     }
-    // 엑셀 시리얼
-    const ms = (val - 25569) * 86400 * 1000
-    const d = new Date(ms)
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+    // 엑셀 날짜 시리얼 (1900.01.01 기준)
+    if (val > 25569) {
+      const ms = (val - 25569) * 86400 * 1000
+      const d = new Date(ms)
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+    }
   }
+
   return null
 }
 
@@ -276,7 +297,7 @@ export async function uploadInspectionResults(rows: InspectionRow[]): Promise<Up
       if (existing) {
         round_id = existing.id
       } else {
-        const season_code = row.계절 ? seasonMap[String(row.계절).trim()] ?? null : null
+        const season_code = row.계절 ? SEASON_KO_TO_CODE[String(row.계절).trim()] ?? null : null
         const { data: newRound } = await supabase
           .from('inspection_rounds')
           .insert({
@@ -554,15 +575,30 @@ export async function generateSampleAnalysisData(): Promise<UploadResult> {
   }
 }
 
+// 새 엑셀 컬럼명 → 내부 필드명 매핑 (한 곳에서 관리)
+export const EXCEL_COL_MAP = {
+  HEIGHT: '수고 H(m)',
+  WIDTH: '수관폭 W(m)',
+  CALIPER: '흉고직경 B(cm)',
+  ROOTBALL: '근원직경 R(cm)',
+  SEASON: '계절(수식)',
+  RESERVE_COST: '예상 예비비(₩)',  // UI/양식 표시명; 구버전 '(d)' 표기도 파싱 시 허용
+} as const
+
+// 엑셀 예비비 컬럼 파싱 — '(₩)' 또는 구버전 '(d)' 두 키 모두 허용
+function getReserveCost(row: DefectAnalysisRow): number | null {
+  const v = row['예상 예비비(₩)'] ?? row['예상 예비비(d)'] ?? null
+  return safeNum(v)
+}
+
+// 엑셀 숫자/문자 안전 변환
+function safeNum(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return isNaN(n) ? null : n
+}
+
 export async function uploadDefectAnalysis(
-  headerInfo: {
-    site_code: string
-    site_name: string
-    completion_date: string | number | null
-    planting_date: string | number | null
-    contractor_name: string
-    region: string
-  },
   rows: DefectAnalysisRow[]
 ): Promise<UploadResult> {
   const supabase = await createClient()
@@ -583,174 +619,168 @@ export async function uploadDefectAnalysis(
     return { success: false, totalRows: rows.length, successCount: 0, failCount: rows.length, errors: ['조직 정보를 찾을 수 없습니다.'] }
   }
 
-  // 현장 조회 → 없으면 승인 대기(pending) 상태로 자동 생성
-  let { data: site } = await supabase
-    .from('sites')
-    .select('id, organization_id, site_name, status')
-    .eq('site_code', headerInfo.site_code.trim())
-    .eq('organization_id', org_id)
-    .maybeSingle()
+  // 현장별로 그룹핑하여 처리 (각 행에 현장정보가 포함된 flat 구조)
+  const siteCache = new Map<string, { id: string; organization_id: string; site_name: string; status: string }>()
+  const contractorCache = new Map<string, string>() // contractor_name → contractor_id
+  const speciesCache = new Map<string, string>()    // species_name → species_id
+  const specCodeCache = new Map<string, string>()   // spec_label → spec_code_id
 
-  if (!site) {
-    const completionDate = excelDateToString(headerInfo.completion_date)
-    const plantingDate = excelDateToString(headerInfo.planting_date)
-    const { data: newSite, error: siteErr } = await supabase
-      .from('sites')
-      .insert({
-        organization_id: org_id,
-        site_code: headerInfo.site_code.trim(),
-        site_name: headerInfo.site_name.trim() || headerInfo.site_code.trim(),
-        region: headerInfo.region.trim() || null,
-        occupancy_date: completionDate || null,
-        start_date: plantingDate || null,
-        status: 'pending',
-      })
-      .select('id, organization_id, site_name, status')
-      .single()
+  // 기존 수종/규격 로드
+  const { data: speciesList } = await supabase.from('species').select('id, species_name_ko').eq('is_active', true)
+  speciesList?.forEach((s) => speciesCache.set(s.species_name_ko, s.id))
 
-    if (siteErr || !newSite) {
-      return {
-        success: false,
-        totalRows: rows.length,
-        successCount: 0,
-        failCount: rows.length,
-        errors: [`현장 자동 생성 실패: ${siteErr?.message ?? '알 수 없는 오류'}`],
-      }
-    }
-    site = newSite
-  }
-
-  // 승인 대기 현장이면 데이터는 저장하되 결과에 안내 메시지 포함
-  const isPendingSite = site.status === 'pending'
-
-  // 시공사 조회 (이름으로)
-  const { data: contractorList } = await supabase
-    .from('contractors')
-    .select('id, contractor_name')
-    .eq('organization_id', site.organization_id)
-
-  const contractorNameMap = new Map(contractorList?.map((c) => [c.contractor_name, c.id]) ?? [])
-  let contractor_id = contractorNameMap.get(headerInfo.contractor_name.trim())
-
-  // 시공사 없으면 자동 생성 (이름이 있을 때), 없으면 "미지정" 시공사 조회/생성
-  if (!contractor_id) {
-    const contractorName = headerInfo.contractor_name.trim() || '미지정'
-    const code = `AUTO_${Date.now()}`
-    const { data: newC } = await supabase
-      .from('contractors')
-      .insert({
-        organization_id: site.organization_id,
-        contractor_name: contractorName,
-        contractor_code: code,
-      })
-      .select('id')
-      .single()
-    contractor_id = newC?.id
-  }
-
-  if (!contractor_id) {
-    return {
-      success: false,
-      totalRows: rows.length,
-      successCount: 0,
-      failCount: rows.length,
-      errors: ['시공사를 생성할 수 없습니다. 관리자에게 문의하세요.'],
-    }
-  }
-
-  // 수종 목록 로드
-  const { data: speciesList } = await supabase
-    .from('species')
-    .select('id, species_name_ko')
-    .eq('is_active', true)
-
-  const speciesNameMap = new Map(speciesList?.map((s) => [s.species_name_ko, s.id]) ?? [])
-
-  // spec_codes 목록 로드
   const { data: specCodes } = await supabase.from('spec_codes').select('id, spec_label_raw')
-  const specCodeMap = new Map(specCodes?.map((s) => [s.spec_label_raw, s.id]) ?? [])
+  specCodes?.forEach((s) => specCodeCache.set(s.spec_label_raw, s.id))
 
-  const planting_date_str = excelDateToString(headerInfo.planting_date)
+  const pendingSiteNames: string[] = []
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
-    const rowNum = i + 1
+    const rowNum = i + 2 // 헤더가 1행이므로 데이터는 2행부터
 
+    const site_code = String(row.현장코드 ?? '').trim()
+    const site_name = String(row.현장명 ?? '').trim()
     const species_name = String(row.수종명 ?? '').trim()
-    const quantity = Number(row.수량 ?? 0)
+    const quantity = safeNum(row.수량)
 
+    if (!site_code) {
+      errors.push(`${rowNum}행: 현장코드가 없습니다.`)
+      continue
+    }
     if (!species_name || !quantity) {
       errors.push(`${rowNum}행: 수종명과 수량은 필수입니다.`)
       continue
     }
 
-    // 수종 조회 또는 자동 생성
-    let species_id = speciesNameMap.get(species_name)
-    if (!species_id) {
+    // 현장 조회/생성 (캐시 활용)
+    if (!siteCache.has(site_code)) {
+      let { data: site } = await supabase
+        .from('sites')
+        .select('id, organization_id, site_name, status')
+        .eq('site_code', site_code)
+        .eq('organization_id', org_id)
+        .maybeSingle()
+
+      if (!site) {
+        const completionDate = excelDateToString(row.준공일)
+        const plantingDate = excelDateToString(row.식재시기)
+        const { data: newSite, error: siteErr } = await supabase
+          .from('sites')
+          .insert({
+            organization_id: org_id,
+            site_code,
+            site_name: site_name || site_code,
+            region: String(row.지역 ?? '').trim() || null,
+            occupancy_date: completionDate || null,
+            start_date: plantingDate || null,
+            status: 'pending',
+          })
+          .select('id, organization_id, site_name, status')
+          .single()
+
+        if (siteErr || !newSite) {
+          errors.push(`${rowNum}행: 현장 자동 생성 실패 — ${siteErr?.message ?? '알 수 없는 오류'}`)
+          continue
+        }
+        site = newSite
+        pendingSiteNames.push(site.site_name)
+      }
+      siteCache.set(site_code, site)
+    }
+
+    const site = siteCache.get(site_code)!
+    if (site.status === 'pending' && !pendingSiteNames.includes(site.site_name)) {
+      pendingSiteNames.push(site.site_name)
+    }
+
+    // 협력사(시공사) 조회/생성 (캐시 활용)
+    const contractor_name = String(row.협력사 ?? '').trim() || '미지정'
+    if (!contractorCache.has(contractor_name)) {
+      const { data: contractorList } = await supabase
+        .from('contractors')
+        .select('id, contractor_name')
+        .eq('organization_id', site.organization_id)
+      contractorList?.forEach((c) => contractorCache.set(c.contractor_name, c.id))
+
+      if (!contractorCache.has(contractor_name)) {
+        const { data: newC } = await supabase
+          .from('contractors')
+          .insert({ organization_id: site.organization_id, contractor_name, contractor_code: `AUTO_${Date.now()}` })
+          .select('id')
+          .single()
+        if (newC) contractorCache.set(contractor_name, newC.id)
+      }
+    }
+
+    const contractor_id = contractorCache.get(contractor_name)
+    if (!contractor_id) {
+      errors.push(`${rowNum}행: 협력사 '${contractor_name}' 생성 실패`)
+      continue
+    }
+
+    // 수종 조회/생성
+    if (!speciesCache.has(species_name)) {
       const code = `AUTO_${species_name.slice(0, 4).replace(/\s/g, '_')}_${Date.now() % 10000}`
       const { data: newSp } = await supabase
         .from('species')
         .insert({ species_name_ko: species_name, species_code: code })
         .select('id')
         .single()
-      if (newSp) {
-        species_id = newSp.id
-        speciesNameMap.set(species_name, newSp.id)
-      } else {
-        errors.push(`${rowNum}행: 수종 '${species_name}' 생성에 실패했습니다.`)
-        continue
-      }
+      if (newSp) speciesCache.set(species_name, newSp.id)
+      else { errors.push(`${rowNum}행: 수종 '${species_name}' 생성 실패`); continue }
     }
+    const species_id = speciesCache.get(species_name)!
 
-    // 규격 레이블 생성 (H·W·B·R 조합)
+    // 규격 레이블 생성 — 엑셀 규격 컬럼 우선, 없으면 H·W·B·R 조합
+    const height = safeNum(row[EXCEL_COL_MAP.HEIGHT])
+    const width = safeNum(row[EXCEL_COL_MAP.WIDTH])
+    const caliper = safeNum(row[EXCEL_COL_MAP.CALIPER])
+    const rootball = safeNum(row[EXCEL_COL_MAP.ROOTBALL])
+
+    const specLabelFromCol = String(row.규격 ?? '').trim()
     const parts: string[] = []
-    if (row.수고H) parts.push(`H${row.수고H}`)
-    if (row.수관폭W) parts.push(`W${row.수관폭W}`)
-    if (row.흉고직경B) parts.push(`B${row.흉고직경B}`)
-    if (row.근원직경R) parts.push(`R${row.근원직경R}`)
-    const spec_label = parts.length > 0 ? parts.join('×') : '규격미상'
+    if (height) parts.push(`H${height}`)
+    if (width) parts.push(`W${width}`)
+    if (caliper) parts.push(`B${caliper}`)
+    if (rootball) parts.push(`R${rootball}`)
+    const spec_label = specLabelFromCol || (parts.length > 0 ? parts.join('×') : '규격미상')
 
-    let spec_code_id = specCodeMap.get(spec_label)
-    if (!spec_code_id) {
+    if (!specCodeCache.has(spec_label)) {
       const { data: newSpec } = await supabase
         .from('spec_codes')
-        .insert({
-          spec_label_raw: spec_label,
-          height_m: row.수고H ?? null,
-          width_m: row.수관폭W ?? null,
-          rootball_r: row.근원직경R ?? null,
-          caliper: row.흉고직경B ?? null,
-        })
+        .insert({ spec_label_raw: spec_label, height_m: height, width_m: width, rootball_r: rootball, caliper })
         .select('id')
         .single()
-      if (newSpec) {
-        spec_code_id = newSpec.id
-        specCodeMap.set(spec_label, newSpec.id)
-      } else {
-        errors.push(`${rowNum}행: 규격 '${spec_label}' 생성에 실패했습니다.`)
-        continue
-      }
+      if (newSpec) specCodeCache.set(spec_label, newSpec.id)
+      else { errors.push(`${rowNum}행: 규격 '${spec_label}' 생성 실패`); continue }
     }
+    const spec_code_id = specCodeCache.get(spec_label)!
 
-    // 예상 하자율 정규화 (100% 단위 → 소수 변환)
+    // 하자율 계산: 새 엑셀은 예상하자율 대신 실제 하자수량을 제공
+    // defect_rate = 하자수량 / 수량
+    const defect_qty = safeNum(row.하자수량)
     let defect_rate: number | null = null
-    if (row.예상하자율 != null) {
-      const raw = Number(row.예상하자율)
-      defect_rate = raw > 1 ? raw / 100 : raw
+    if (defect_qty != null && quantity > 0) {
+      defect_rate = defect_qty / quantity
     }
 
-    const unit_price = row.단가 ? Number(row.단가) : null
+    const unit_price = safeNum(row.단가)
+    const reserve_cost = getReserveCost(row)
 
-    // 엑셀 수식 결과값 (K/L/M열) — 있으면 직접 저장, 없으면 DB 트리거가 계산
-    const excelDefectQty = row.예상하자수량 != null ? Math.round(Number(row.예상하자수량)) : null
-    const excelReserveCost = row.예상예비비 != null ? Math.round(Number(row.예상예비비)) : null
-    const excelRiskLevel = row.리스크등급 ? String(row.리스크등급).replace(/[☑□✓×]/g, '').trim() : null
-    const validRisk = ['고위험', '중위험', '저위험'].includes(excelRiskLevel ?? '') ? excelRiskLevel : null
+    // 리스크등급 정제
+    const rawRisk = row.리스크등급 ? String(row.리스크등급).replace(/[☑□✓×]/g, '').trim() : null
+    const validRisk = ['고위험', '중위험', '저위험'].includes(rawRisk ?? '') ? rawRisk : null
+
+    // 식재시기 (행에서 직접)
+    const planting_date_str = excelDateToString(row.식재시기)
+    const notes_parts: string[] = []
+    const sebaejochi = String(row.세부조치 ?? '').trim()
+    if (sebaejochi) notes_parts.push(`세부조치: ${sebaejochi}`)
 
     const insertData: Record<string, unknown> = {
       organization_id: site.organization_id,
       site_id: site.id,
-      contractor_id: contractor_id!,
+      contractor_id,
       species_id,
       spec_code_id,
       quantity_planted: quantity,
@@ -758,25 +788,21 @@ export async function uploadDefectAnalysis(
       unit_price,
       expected_defect_rate: defect_rate,
       source_type: 'excel_import',
-      notes: row.비고 ? String(row.비고).trim() : null,
+      notes: notes_parts.length > 0 ? notes_parts.join(' | ') : null,
     }
-    // 엑셀에 계산 결과가 있으면 함께 저장 (트리거보다 우선 적용)
-    if (excelDefectQty != null) insertData.expected_defect_qty = excelDefectQty
-    if (excelReserveCost != null) insertData.expected_reserve_cost = excelReserveCost
+    if (defect_qty != null) insertData.expected_defect_qty = Math.round(defect_qty)
+    if (reserve_cost != null) insertData.expected_reserve_cost = Math.round(reserve_cost)
     if (validRisk) insertData.risk_level = validRisk
 
     const { error } = await supabase.from('planting_records').insert(insertData)
-
-    if (error) {
-      errors.push(`${rowNum}행 (${species_name}): ${error.message}`)
-    } else {
-      successCount++
-    }
+    if (error) errors.push(`${rowNum}행 (${species_name}): ${error.message}`)
+    else successCount++
   }
 
+  const siteNames = [...new Set(rows.map((r) => String(r.현장코드 ?? '').trim()).filter(Boolean))]
   await supabase.from('upload_logs').insert({
     uploaded_by: user.id,
-    file_name: `하자율예측_${headerInfo.site_name || headerInfo.site_code}`,
+    file_name: `하자율예측_${siteNames.slice(0, 3).join(',')}`,
     upload_type: '하자율예측',
     row_count: rows.length,
     status: errors.length === 0 ? 'success' : successCount > 0 ? 'partial' : 'failed',
@@ -788,8 +814,8 @@ export async function uploadDefectAnalysis(
   revalidatePath('/settings')
   revalidatePath('/dashboard')
 
-  const pendingNote = isPendingSite
-    ? [`현장 '${site.site_name}'이 승인 대기 상태로 등록되었습니다. 관리자 승인 후 대시보드에 표시됩니다.`]
+  const pendingNotes = pendingSiteNames.length > 0
+    ? [`현장 '${pendingSiteNames.join(', ')}'이(가) 승인 대기 상태로 등록되었습니다. 관리자 승인 후 대시보드에 표시됩니다.`]
     : []
 
   return {
@@ -797,7 +823,7 @@ export async function uploadDefectAnalysis(
     totalRows: rows.length,
     successCount,
     failCount: errors.length,
-    errors: [...pendingNote, ...errors.slice(0, 20)],
+    errors: [...pendingNotes, ...errors.slice(0, 20)],
   }
 }
 

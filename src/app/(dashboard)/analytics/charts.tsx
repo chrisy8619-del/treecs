@@ -46,9 +46,9 @@ export type SiteReserveData = {
   risk_level: string
 }
 
-const seasonLabel: Record<string, string> = {
-  spring: '봄', summer: '여름', fall: '가을', winter: '겨울',
-}
+import { SEASON_CODE_TO_KO } from '@/lib/season-utils'
+
+const seasonLabel: Record<string, string> = SEASON_CODE_TO_KO
 
 // 엑셀 기준: ≥20% 고위험, ≥10% 중위험, 미만 저위험
 function riskColor(rate: number) {
