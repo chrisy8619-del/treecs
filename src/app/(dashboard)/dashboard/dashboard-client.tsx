@@ -44,6 +44,10 @@ export type PlantingRow = {
   width_m: number | null
   rootball_r: number | null
   caliper: number | null
+  // API 응답 원본 (조인 필드)
+  contractors?: { contractor_name: string } | { contractor_name: string }[] | null
+  species?: { species_name_ko: string } | { species_name_ko: string }[] | null
+  spec_codes?: { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number } | { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number }[] | null
 }
 
 type Props = {
@@ -251,10 +255,11 @@ export function DashboardClient({ sites }: Props) {
     fetch(`/api/plantings-by-site?site_id=${selectedSiteId}`)
       .then((r) => r.json())
       .then((data: PlantingRow[]) => {
+        console.log('[plantings-by-site] response:', data)
         const mapped = data.map((r) => {
-          const contractor = Array.isArray(r.contractors) ? (r.contractors as unknown as { contractor_name: string }[])[0] : r.contractors as unknown as { contractor_name: string } | null
-          const species = Array.isArray(r.species) ? (r.species as unknown as { species_name_ko: string }[])[0] : r.species as unknown as { species_name_ko: string } | null
-          const spec = Array.isArray(r.spec_codes) ? (r.spec_codes as unknown as { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number }[])[0] : r.spec_codes as unknown as { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number } | null
+          const contractor = Array.isArray(r.contractors) ? r.contractors[0] : r.contractors
+          const species = Array.isArray(r.species) ? r.species[0] : r.species
+          const spec = Array.isArray(r.spec_codes) ? r.spec_codes[0] : r.spec_codes
           return {
             ...r,
             contractor_name: contractor?.contractor_name ?? null,
@@ -267,7 +272,7 @@ export function DashboardClient({ sites }: Props) {
         })
         setSiteRows(mapped)
       })
-      .catch(() => setSiteRows([]))
+      .catch((err) => { console.error('[plantings-by-site] fetch error:', err); setSiteRows([]) })
       .finally(() => setLoadingRows(false))
   }, [selectedSiteId])
 
@@ -453,7 +458,7 @@ export function DashboardClient({ sites }: Props) {
                         {codeDropdownOpen && codeMatches.length > 0 && (
                           <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                             {codeMatches.map((s) => (
-                              <button key={s.id} onMouseDown={() => selectSite(s)}
+                              <button key={s.id} onMouseDown={(e) => { e.preventDefault(); selectSite(s) }}
                                 className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 flex items-center gap-2">
                                 <span className="font-mono text-gray-500 w-20 shrink-0">{s.site_code}</span>
                                 <span className="text-gray-800">{s.site_name}</span>
@@ -481,7 +486,7 @@ export function DashboardClient({ sites }: Props) {
                         {nameDropdownOpen && nameMatches.length > 0 && (
                           <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                             {nameMatches.map((s) => (
-                              <button key={s.id} onMouseDown={() => selectSite(s)}
+                              <button key={s.id} onMouseDown={(e) => { e.preventDefault(); selectSite(s) }}
                                 className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 flex items-center gap-2">
                                 <span className="text-gray-800 font-medium">{s.site_name}</span>
                                 <span className="font-mono text-gray-400">{s.site_code}</span>
