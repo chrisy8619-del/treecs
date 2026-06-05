@@ -319,6 +319,12 @@ export function DashboardClient({ sites }: Props) {
     setPage(1)
   }
 
+  // 현장 협력사 목록 (planting_records의 contractor_name 중복 제거)
+  const contractorNames = useMemo(() => {
+    const names = siteRows.map((r) => r.contractor_name).filter((n): n is string => !!n)
+    return [...new Set(names)]
+  }, [siteRows])
+
   // 집계 (필터 적용 전 전체 기준)
   const totalQty = siteRows.reduce((s, r) => s + r.quantity_planted, 0)
   const totalDefectQty = siteRows.reduce((s, r) => s + (r.expected_defect_qty ?? 0), 0)
@@ -443,7 +449,7 @@ export function DashboardClient({ sites }: Props) {
                 <tbody>
                   <tr className="border-b">
                     <td className="px-4 py-2.5 bg-gray-100 font-medium text-gray-500 w-24 text-xs">현장코드</td>
-                    <td className="px-3 py-1.5 relative" colSpan={3}>
+                    <td className="px-3 py-1.5 relative">
                       <div className="relative">
                         <input
                           type="text"
@@ -467,6 +473,12 @@ export function DashboardClient({ sites }: Props) {
                           </div>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-2.5 bg-gray-50 font-medium text-gray-600 text-xs border-l w-20">협력사</td>
+                    <td className="px-4 py-2.5 text-gray-900 text-xs">
+                      {contractorNames.length > 0
+                        ? contractorNames.join(' · ')
+                        : <span className="text-gray-400">-</span>}
                     </td>
                   </tr>
                   <tr className="border-b">
