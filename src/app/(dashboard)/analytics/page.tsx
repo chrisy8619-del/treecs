@@ -9,23 +9,8 @@ import {
   SiteReserveCostChart,
   type SiteReserveData,
 } from './charts'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { SiteAnalysisTable } from './site-analysis-table'
-
-// 엑셀 기준 리스크 등급: ≥20% 고위험, ≥10% 중위험, 미만 저위험
-function riskBadge(rate: number) {
-  if (rate >= 0.20) return <Badge className="bg-red-500 hover:bg-red-500 text-white">고위험</Badge>
-  if (rate >= 0.10) return <Badge className="bg-yellow-500 hover:bg-yellow-500 text-white">중위험</Badge>
-  return <Badge className="bg-green-500 hover:bg-green-500 text-white">저위험</Badge>
-}
+import { SpeciesAnalysisTable } from './species-analysis-table'
 
 function riskLabel(rate: number) {
   if (rate >= 0.20) return '🔴 고위험'
@@ -523,44 +508,7 @@ export default async function AnalyticsPage() {
 
           {/* 수종별 테이블 */}
           {speciesData.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  수종별 하자율
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">총 {speciesData.length}종</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>순위</TableHead>
-                      <TableHead>수종명</TableHead>
-                      <TableHead className="text-right">수량</TableHead>
-                      <TableHead className="text-right">하자 수량</TableHead>
-                      <TableHead className="text-right">하자율</TableHead>
-                      <TableHead>리스크 등급</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {speciesData.map((sp, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
-                        <TableCell className="font-medium">{sp.name}</TableCell>
-                        <TableCell className="text-right">{sp.inspected.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">{sp.defect.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          <span className={sp.defect_rate >= 0.20 ? 'text-red-500' : sp.defect_rate >= 0.10 ? 'text-yellow-500' : ''}>
-                            {(sp.defect_rate * 100).toFixed(1)}%
-                          </span>
-                        </TableCell>
-                        <TableCell>{riskBadge(sp.defect_rate)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <SpeciesAnalysisTable data={speciesData} />
           )}
         </>
       )}
