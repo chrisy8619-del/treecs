@@ -598,6 +598,22 @@ function safeNum(v: unknown): number | null {
   return isNaN(n) ? null : n
 }
 
+// 단가 문자열 파싱 ("6,000,000" → 6000000, "단가없음" → null)
+function parseUnitPrice(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const s = String(v).replace(/,/g, '').trim()
+  if (!s || /[가-힣a-zA-Z]/.test(s)) return null  // "단가없음" 등 문자 포함 시 null
+  const n = Number(s)
+  return isNaN(n) || n <= 0 ? null : n
+}
+
+// 현장명 → site_code 자동 생성 (현장코드 없을 때 사용)
+function toSiteCode(siteName: string): string {
+  // 한글 제거 후 영문/숫자만 추출, 없으면 순번 기반 해시
+  const cleaned = siteName.replace(/\s+/g, '_')
+  return `SITE_${cleaned.slice(0, 20)}`
+}
+
 export async function uploadDefectAnalysis(
   rows: DefectAnalysisRow[]
 ): Promise<UploadResult> {
@@ -638,13 +654,14 @@ export async function uploadDefectAnalysis(
     const row = rows[i]
     const rowNum = i + 2 // 헤더가 1행이므로 데이터는 2행부터
 
-    const site_code = String(row.현장코드 ?? '').trim()
     const site_name = String(row.현장명 ?? '').trim()
+    // 현장코드 없으면 현장명으로 자동 생성
+    const site_code = String(row.현장코드 ?? '').trim() || (site_name ? toSiteCode(site_name) : '')
     const species_name = String(row.수종명 ?? '').trim()
     const quantity = safeNum(row.수량)
 
-    if (!site_code) {
-      errors.push(`${rowNum}행: 현장코드가 없습니다.`)
+    if (!site_code && !site_name) {
+      errors.push(`${rowNum}행: 현장코드 또는 현장명이 필요합니다.`)
       continue
     }
     if (!species_name || !quantity) {
@@ -663,7 +680,8 @@ export async function uploadDefectAnalysis(
 
       if (!site) {
         const completionDate = excelDateToString(row.준공일)
-        const plantingDate = excelDateToString(row.식재시기)
+        // 식재시기 없으면 날짜 컬럼(점검/조사 날짜) 사용
+        const plantingDate = excelDateToString(row.식재시기) ?? excelDateToString(row.날짜)
         const { data: newSite, error: siteErr } = await supabase
           .from('sites')
           .insert({
@@ -673,7 +691,7 @@ export async function uploadDefectAnalysis(
             region: String(row.지역 ?? '').trim() || null,
             occupancy_date: completionDate || null,
             start_date: plantingDate || null,
-            status: 'pending',
+            status: 'active',  // 원데이터는 즉시 active로 등록
           })
           .select('id, organization_id, site_name, status')
           .single()
@@ -764,15 +782,15 @@ export async function uploadDefectAnalysis(
       defect_rate = defect_qty / quantity
     }
 
-    const unit_price = safeNum(row.단가)
+    const unit_price = parseUnitPrice(row.단가)
     const reserve_cost = getReserveCost(row)
 
     // 리스크등급 정제
     const rawRisk = row.리스크등급 ? String(row.리스크등급).replace(/[☑□✓×]/g, '').trim() : null
     const validRisk = ['고위험', '중위험', '저위험'].includes(rawRisk ?? '') ? rawRisk : null
 
-    // 식재시기 (행에서 직접)
-    const planting_date_str = excelDateToString(row.식재시기)
+    // 식재시기 우선, 없으면 날짜 컬럼 사용
+    const planting_date_str = excelDateToString(row.식재시기) ?? excelDateToString(row.날짜)
     const notes_parts: string[] = []
     const sebaejochi = String(row.세부조치 ?? '').trim()
     if (sebaejochi) notes_parts.push(`세부조치: ${sebaejochi}`)

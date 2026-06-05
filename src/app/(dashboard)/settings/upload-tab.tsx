@@ -72,32 +72,52 @@ function safeNum(v: unknown): number | null {
   return isNaN(n) ? null : n
 }
 
+// 단가 문자열 파싱 ("6,000,000" → 6000000, "단가없음" → null)
+function parseUnitPrice(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const s = String(v).replace(/,/g, '').trim()
+  if (!s || /[가-힣a-zA-Z]/.test(s)) return null
+  const n = Number(s)
+  return isNaN(n) || n <= 0 ? null : n
+}
+
 // 하자율 예측 엑셀 파싱 (새 flat 테이블 구조)
-// 1행: 헤더 컬럼명, 2행~: 실제 데이터
+// 1행: 헤더 컬럼명, 2행~: 실제 데이터 (컬럼명 공백 자동 trim 처리)
 function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
   rows: DefectAnalysisRow[]
   rawRows: PreviewRow[]
 } {
-  const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: null })
+  const rawAll: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: null })
+
+  // 컬럼명 앞뒤 공백 제거 + 문자열 값 trim
+  const raw = rawAll.map((r) => {
+    const cleaned: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(r)) {
+      cleaned[k.trim()] = typeof v === 'string' ? v.trim() : v
+    }
+    return cleaned
+  })
 
   const rows: DefectAnalysisRow[] = []
   const rawRows: PreviewRow[] = []
 
   for (const r of raw) {
     const siteCode = r['현장코드'] != null ? String(r['현장코드']).trim() : ''
+    const siteName = r['현장명'] != null ? String(r['현장명']).trim() : ''
     const speciesName = r['수종명'] != null ? String(r['수종명']).trim() : ''
-    if (!siteCode && !speciesName) continue // 완전 빈 행 스킵
+    if (!siteCode && !siteName && !speciesName) continue // 완전 빈 행 스킵
 
     const qty = safeNum(r['수량'])
     const defectQty = safeNum(r['하자수량'])
-    // 하자율 = 하자수량 / 수량 (표시용)
-    const defectRatePct = qty && defectQty != null ? ((defectQty / qty) * 100).toFixed(2) + '%' : null
-    const reserveCost = safeNum(r['예상 예비비(₩)']) ?? safeNum(r['예상 예비비(₩)'])
+    const defectRatePct = qty && defectQty != null && qty > 0
+      ? ((defectQty / qty) * 100).toFixed(2) + '%' : null
+    const reserveCost = safeNum(r['예상 예비비(₩)']) ?? safeNum(r['예상 예비비(d)'])
+    const unitPrice = parseUnitPrice(r['단가'])
 
     const row: DefectAnalysisRow = {
       날짜: r['날짜'] as string | number | undefined ?? undefined,
       현장코드: siteCode || undefined,
-      현장명: r['현장명'] != null ? String(r['현장명']).trim() : undefined,
+      현장명: siteName || undefined,
       준공일: r['준공일'] as string | number | undefined ?? undefined,
       식재시기: r['식재시기'] as string | number | undefined ?? undefined,
       협력사: r['협력사'] != null ? String(r['협력사']).trim() : undefined,
@@ -109,7 +129,7 @@ function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
       수량: qty ?? undefined,
       하자수량: defectQty ?? undefined,
       지역: r['지역'] != null ? String(r['지역']).trim() : undefined,
-      단가: safeNum(r['단가']) ?? undefined,
+      단가: unitPrice ?? undefined,
       '계절(수식)': r['계절(수식)'] != null ? String(r['계절(수식)']).trim() : undefined,
       규격: r['규격'] != null ? String(r['규격']).trim() : undefined,
       리스크등급: r['리스크등급'] != null ? String(r['리스크등급']).trim() : undefined,
@@ -126,7 +146,7 @@ function parseDefectAnalysisExcel(sheet: XLSX.WorkSheet): {
       수량: qty,
       하자수량: defectQty,
       하자율: defectRatePct,
-      단가: row.단가 ?? null,
+      단가: unitPrice != null ? `₩${unitPrice.toLocaleString()}` : (r['단가'] ? String(r['단가']) : null),
       예상예비비: reserveCost != null ? `₩${reserveCost.toLocaleString()}` : null,
       리스크등급: row.리스크등급 ?? null,
       협력사: row.협력사 ?? null,
