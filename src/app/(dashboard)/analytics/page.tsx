@@ -270,11 +270,16 @@ export default async function AnalyticsPage() {
   const hasData = siteData.length > 0 || yearlyData.length > 0 || hasPlantingAnalysis
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">대시보드</h2>
-        <p className="text-muted-foreground">하자율 통계 및 리스크 분석 현황입니다.</p>
+    <div className="space-y-0 -m-6">
+      {/* ── 상단 헤더 ── */}
+      <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">대시보드</h1>
+          <p className="text-xs text-green-200 mt-0.5">현장별 하자율 통계 및 리스크 분석 현황입니다.</p>
+        </div>
       </div>
+
+      <div className="px-6 py-5 space-y-6">
 
       {!hasData ? (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
@@ -583,6 +588,7 @@ export default async function AnalyticsPage() {
           )}
         </>
       )}
+      </div>
     </div>
   )
 }
