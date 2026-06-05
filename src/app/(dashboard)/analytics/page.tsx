@@ -54,7 +54,7 @@ async function getAnalyticsData() {
       .from('agg_metrics_by_contractor')
       .select('total_quantity, total_defect_quantity, defect_rate, contractors(contractor_name)')
       .order('defect_rate', { ascending: false }),
-    // 하자율 예측 데이터: 식재기록 기반 예비비·계절 분석
+    // 하자율 예측 데이터: 식재기록 기반 예비비·계절·협력사·연도 분석
     supabase
       .from('planting_records')
       .select(`
@@ -66,22 +66,44 @@ async function getAnalyticsData() {
         expected_defect_qty,
         expected_reserve_cost,
         risk_level,
-        species ( species_name_ko )
+        species ( species_name_ko ),
+        contractors ( contractor_name )
       `)
       .not('expected_defect_rate', 'is', null)
       .limit(10000),
   ])
 
-  // 연도별
-  const yearlyData = (yearlyRes.data ?? []).map((d) => ({
-    year: d.year,
-    defect_rate: d.defect_rate ?? 0,
-    total_quantity: d.total_quantity,
-    total_defect_quantity: d.total_defect_quantity,
-  }))
-
   const items = itemsRes.data ?? []
   const plantings = plantingRes.data ?? []
+
+  // 연도별 — 집계 테이블 우선, 없으면 planting_records 기반으로 집계
+  let yearlyData: { year: number; defect_rate: number; total_quantity: number; total_defect_quantity: number }[] = []
+  if (yearlyRes.data && yearlyRes.data.length > 0) {
+    yearlyData = yearlyRes.data.map((d) => ({
+      year: d.year,
+      defect_rate: d.defect_rate ?? 0,
+      total_quantity: d.total_quantity,
+      total_defect_quantity: d.total_defect_quantity,
+    }))
+  } else if (plantings.length > 0) {
+    const yMap = new Map<number, { qty: number; defectQty: number }>()
+    for (const p of plantings) {
+      if (!p.planting_date) continue
+      const year = new Date(p.planting_date).getFullYear()
+      const qty = p.quantity_planted ?? 0
+      const defectQty = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
+      const prev = yMap.get(year) ?? { qty: 0, defectQty: 0 }
+      yMap.set(year, { qty: prev.qty + qty, defectQty: prev.defectQty + defectQty })
+    }
+    yearlyData = [...yMap.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([year, v]) => ({
+        year,
+        defect_rate: v.qty > 0 ? v.defectQty / v.qty : 0,
+        total_quantity: v.qty,
+        total_defect_quantity: v.defectQty,
+      }))
+  }
 
   // 계절별 — 점검 회차 season_code 우선, 없으면 식재기록 planting_date로 보완
   const seasonMap = new Map<string, { inspected: number; defect: number }>()
@@ -123,14 +145,14 @@ async function getAnalyticsData() {
       return { label: s, defect_rate: inspected > 0 ? defect / inspected : 0 }
     })
 
-  // 시공사별
+  // 협력사별 — 집계 테이블 우선, 없으면 inspection_items, 그것도 없으면 planting_records 기반
   let contractorData: { name: string; defect_rate: number; total_quantity: number }[] = []
   if (contractorRes.data && contractorRes.data.length > 0) {
     contractorData = contractorRes.data.map((d) => {
       const c = Array.isArray(d.contractors) ? d.contractors[0] : d.contractors
       return { name: c?.contractor_name ?? '알 수 없음', defect_rate: d.defect_rate ?? 0, total_quantity: d.total_quantity }
     })
-  } else {
+  } else if (items.length > 0) {
     const cMap = new Map<string, { name: string; inspected: number; defect: number }>()
     for (const item of items) {
       const c = Array.isArray(item.contractors) ? item.contractors[0] : item.contractors
@@ -144,6 +166,20 @@ async function getAnalyticsData() {
     }
     contractorData = [...cMap.values()]
       .map((v) => ({ name: v.name, defect_rate: v.inspected > 0 ? v.defect / v.inspected : 0, total_quantity: v.inspected }))
+      .sort((a, b) => b.defect_rate - a.defect_rate)
+  } else {
+    // planting_records 기반 협력사별 집계
+    const cMap = new Map<string, { name: string; qty: number; defectQty: number }>()
+    for (const p of plantings) {
+      const c = Array.isArray(p.contractors) ? p.contractors[0] : p.contractors
+      const name = (c as { contractor_name?: string } | null)?.contractor_name ?? '알 수 없음'
+      const qty = p.quantity_planted ?? 0
+      const defectQty = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
+      const prev = cMap.get(name) ?? { name, qty: 0, defectQty: 0 }
+      cMap.set(name, { name, qty: prev.qty + qty, defectQty: prev.defectQty + defectQty })
+    }
+    contractorData = [...cMap.values()]
+      .map((v) => ({ name: v.name, defect_rate: v.qty > 0 ? v.defectQty / v.qty : 0, total_quantity: v.qty }))
       .sort((a, b) => b.defect_rate - a.defect_rate)
   }
 
@@ -399,7 +435,7 @@ export default async function AnalyticsPage() {
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">시공사별 하자율</CardTitle>
+                <CardTitle className="text-base">협력사별 하자율</CardTitle>
               </CardHeader>
               <CardContent>
                 {contractorData.length > 0 ? (
