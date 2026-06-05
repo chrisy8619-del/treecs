@@ -5,10 +5,9 @@ import { Separator } from '@/components/ui/separator'
 import { usePathname } from 'next/navigation'
 
 const pageTitles: Record<string, string> = {
-  '/dashboard': '대시보드',
-  '/inspections': '점검 관리',
+  '/analytics': '대시보드',
+  '/dashboard': '현장 하자율 예측 분석',
   '/plantings': '식재 기록',
-  '/analytics': '분석',
   '/sites': '현장 관리',
   '/contractors': '시공사 관리',
   '/species': '수종 관리',
