@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -40,6 +41,27 @@ const navMaster = [
   { title: '설정', href: '/settings', icon: Settings },
 ]
 
+function NavItem({ item, isActive }: { item: { title: string; href: string; icon: React.ElementType }; isActive: boolean }) {
+  return (
+    <SidebarMenuItem>
+      <Link href={item.href} className="w-full">
+        <SidebarMenuButton
+          tooltip={item.title}
+          isActive={isActive}
+          className={
+            isActive
+              ? 'bg-[#1a3a2a] text-white hover:bg-[#2a5a3e] hover:text-white'
+              : 'hover:bg-[#1a3a2a]/10 hover:text-[#1a3a2a]'
+          }
+        >
+          <item.icon />
+          <span>{item.title}</span>
+        </SidebarMenuButton>
+      </Link>
+    </SidebarMenuItem>
+  )
+}
+
 export function AppSidebar() {
   const pathname = usePathname()
 
@@ -48,9 +70,9 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <Link href="/dashboard" className="w-full">
+            <Link href="/analytics" className="w-full">
               <SidebarMenuButton size="lg">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#1a3a2a] text-white text-xs font-bold">
                   TC
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
@@ -68,38 +90,9 @@ export function AppSidebar() {
           <SidebarGroupLabel>메뉴</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navMain.map((item) => {
-                const isDashboard = item.href === '/analytics'
-                const isActive = pathname === item.href
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <Link href={item.href} className="w-full">
-                      {isDashboard ? (
-                        <SidebarMenuButton
-                          tooltip={item.title}
-                          isActive={isActive}
-                          className={
-                            isActive
-                              ? 'bg-[#1a3a2a] text-white hover:bg-[#2a5a3e] hover:text-white'
-                              : 'bg-[#1a3a2a] text-white hover:bg-[#2a5a3e] hover:text-white opacity-90'
-                          }
-                        >
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </SidebarMenuButton>
-                      ) : (
-                        <SidebarMenuButton
-                          tooltip={item.title}
-                          isActive={isActive}
-                        >
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </SidebarMenuButton>
-                      )}
-                    </Link>
-                  </SidebarMenuItem>
-                )
-              })}
+              {navMain.map((item) => (
+                <NavItem key={item.href} item={item} isActive={pathname === item.href} />
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -109,17 +102,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navMaster.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} className="w-full">
-                    <SidebarMenuButton
-                      tooltip={item.title}
-                      isActive={pathname === item.href}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
+                <NavItem key={item.href} item={item} isActive={pathname === item.href} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
