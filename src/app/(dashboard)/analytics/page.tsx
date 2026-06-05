@@ -69,7 +69,8 @@ async function getAnalyticsData() {
         risk_level,
         species ( species_name_ko )
       `)
-      .not('expected_defect_rate', 'is', null),
+      .not('expected_defect_rate', 'is', null)
+      .limit(10000),
   ])
 
   // 연도별

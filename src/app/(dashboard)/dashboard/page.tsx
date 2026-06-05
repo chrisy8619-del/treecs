@@ -46,6 +46,7 @@ export default async function DashboardPage() {
       spec_codes ( height_m, width_m, rootball_r, caliper )
     `)
     .order('created_at', { ascending: true })
+    .limit(10000)
 
   const allPlantings: PlantingRow[] = (plantingsRaw ?? []).map((r) => {
     const contractor = Array.isArray(r.contractors) ? r.contractors[0] : r.contractors

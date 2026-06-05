@@ -37,7 +37,8 @@ export default async function PlantingsPage() {
         species ( species_name_ko ),
         spec_codes ( spec_label_raw )
       `)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .limit(10000),
     supabase.from('sites').select('id, site_name, site_code').eq('status', 'active').order('site_name'),
     supabase.from('contractors').select('id, contractor_name, contractor_code').eq('is_active', true).order('contractor_name'),
     supabase.from('species').select('id, species_name_ko, species_code').eq('is_active', true).order('species_name_ko'),
