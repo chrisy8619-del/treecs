@@ -29,50 +29,5 @@ export default async function DashboardPage() {
     }
   })
 
-  // 모든 현장의 planting_records (하자율 예측 데이터)
-  // source_type이 'excel_import'이거나 unit_price/expected_defect_rate 가 있는 데이터를 우선
-  const { data: plantingsRaw } = await supabase
-    .from('planting_records')
-    .select(`
-      id,
-      site_id,
-      quantity_planted,
-      unit_price,
-      expected_defect_rate,
-      expected_defect_qty,
-      expected_reserve_cost,
-      risk_level,
-      notes,
-      contractors ( contractor_name ),
-      species ( species_name_ko ),
-      spec_codes ( height_m, width_m, rootball_r, caliper )
-    `)
-    .order('created_at', { ascending: true })
-    .limit(10000)
-
-  const allPlantings: PlantingRow[] = (plantingsRaw ?? []).map((r) => {
-    const contractor = Array.isArray(r.contractors) ? r.contractors[0] : r.contractors
-    const species = Array.isArray(r.species) ? r.species[0] : r.species
-    const spec = Array.isArray(r.spec_codes) ? r.spec_codes[0] : r.spec_codes
-
-    return {
-      id: r.id,
-      site_id: r.site_id,
-      quantity_planted: r.quantity_planted,
-      unit_price: r.unit_price != null ? Number(r.unit_price) : null,
-      expected_defect_rate: r.expected_defect_rate != null ? Number(r.expected_defect_rate) : null,
-      expected_defect_qty: r.expected_defect_qty ?? null,
-      expected_reserve_cost: r.expected_reserve_cost != null ? Number(r.expected_reserve_cost) : null,
-      risk_level: r.risk_level ?? null,
-      notes: r.notes ?? null,
-      contractor_name: (contractor as { contractor_name: string } | null)?.contractor_name ?? null,
-      species_name: (species as { species_name_ko: string } | null)?.species_name_ko ?? null,
-      height_m: (spec as { height_m?: number } | null)?.height_m ?? null,
-      width_m: (spec as { width_m?: number } | null)?.width_m ?? null,
-      rootball_r: (spec as { rootball_r?: number } | null)?.rootball_r ?? null,
-      caliper: (spec as { caliper?: number } | null)?.caliper ?? null,
-    }
-  })
-
-  return <DashboardClient sites={sites} allPlantings={allPlantings} />
+  return <DashboardClient sites={sites} />
 }

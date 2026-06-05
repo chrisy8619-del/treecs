@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, useTransition } from 'react'
+import { useState, useMemo, useRef, useTransition, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import {
   Table,
@@ -48,7 +48,6 @@ export type PlantingRow = {
 
 type Props = {
   sites: SiteOption[]
-  allPlantings: PlantingRow[]
 }
 
 type RiskFilter = 'all' | '고위험' | '중위험' | '저위험'
@@ -217,7 +216,7 @@ function buildTemplateWorkbook(site: SiteOption | null, rows: PlantingRow[]) {
 }
 
 // ─── 컴포넌트 ─────────────────────────────────────────────
-export function DashboardClient({ sites, allPlantings }: Props) {
+export function DashboardClient({ sites }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -227,6 +226,10 @@ export function DashboardClient({ sites, allPlantings }: Props) {
   const [nameInput, setNameInput] = useState(sites[0]?.site_name ?? '')
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false)
   const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
+
+  // 현장별 planting_records (API 조회)
+  const [siteRows, setSiteRows] = useState<PlantingRow[]>([])
+  const [loadingRows, setLoadingRows] = useState(false)
 
   // 필터 / 페이지네이션
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
@@ -240,11 +243,33 @@ export function DashboardClient({ sites, allPlantings }: Props) {
   // 선택된 현장
   const site = useMemo(() => sites.find((s) => s.id === selectedSiteId) ?? sites[0] ?? null, [sites, selectedSiteId])
 
-  // 현장 수목 전체
-  const siteRows = useMemo(
-    () => allPlantings.filter((r) => r.site_id === (site?.id ?? '')),
-    [allPlantings, site]
-  )
+  // 현장 변경 시 API 호출
+  useEffect(() => {
+    if (!selectedSiteId) return
+    setLoadingRows(true)
+    setSiteRows([])
+    fetch(`/api/plantings-by-site?site_id=${selectedSiteId}`)
+      .then((r) => r.json())
+      .then((data: PlantingRow[]) => {
+        const mapped = data.map((r) => {
+          const contractor = Array.isArray(r.contractors) ? (r.contractors as unknown as { contractor_name: string }[])[0] : r.contractors as unknown as { contractor_name: string } | null
+          const species = Array.isArray(r.species) ? (r.species as unknown as { species_name_ko: string }[])[0] : r.species as unknown as { species_name_ko: string } | null
+          const spec = Array.isArray(r.spec_codes) ? (r.spec_codes as unknown as { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number }[])[0] : r.spec_codes as unknown as { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number } | null
+          return {
+            ...r,
+            contractor_name: contractor?.contractor_name ?? null,
+            species_name: species?.species_name_ko ?? null,
+            height_m: spec?.height_m ?? null,
+            width_m: spec?.width_m ?? null,
+            rootball_r: spec?.rootball_r ?? null,
+            caliper: spec?.caliper ?? null,
+          }
+        })
+        setSiteRows(mapped)
+      })
+      .catch(() => setSiteRows([]))
+      .finally(() => setLoadingRows(false))
+  }, [selectedSiteId])
 
   // 드롭다운 필터
   const codeMatches = useMemo(
@@ -636,7 +661,7 @@ export function DashboardClient({ sites, allPlantings }: Props) {
                   {pagedRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={15} className="text-center py-12 text-gray-400 text-sm">
-                        {riskFilter !== 'all' ? `${riskFilter} 수목이 없습니다.` : '이 현장에 수목 데이터가 없습니다.'}
+                        {loadingRows ? '데이터 불러오는 중...' : riskFilter !== 'all' ? `${riskFilter} 수목이 없습니다.` : '이 현장에 수목 데이터가 없습니다.'}
                       </TableCell>
                     </TableRow>
                   ) : (
