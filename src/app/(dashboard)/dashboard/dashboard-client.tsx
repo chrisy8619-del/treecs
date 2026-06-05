@@ -416,10 +416,7 @@ export function DashboardClient({ sites }: Props) {
       {/* ── 상단 헤더 ── */}
       <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">신규 현장 하자율 예측 분석</h1>
-          <p className="text-xs text-green-200 mt-0.5">
-            수종별 + 규격(H·W·B·R) 입력 → 조합형 단가 자동조회 · 예상 하자율/예비비 자동 산출
-          </p>
+          <h1 className="text-xl font-bold tracking-tight">현장 하자율 예측 분석</h1>
         </div>
         <div className="flex items-center gap-2">
           <button
