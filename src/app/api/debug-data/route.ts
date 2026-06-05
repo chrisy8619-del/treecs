@@ -15,18 +15,24 @@ export async function GET() {
   // 현장별 planting_records 수 (상위 10개)
   const { data: sites } = await supabase.from('sites').select('id, site_name, site_code, status').in('status', ['active', 'closed']).limit(10)
 
-  // 모든 현장의 planting_count 확인
-  const { data: allSites } = await supabase.from('sites').select('id, site_name, site_code, status').in('status', ['active', 'closed'])
+  // 만촌자이르네 현장 ID 확인
+  const { data: manch } = await supabase.from('sites').select('id, site_name, site_code, status').ilike('site_name', '%만촌%')
 
-  const siteStats = await Promise.all(
-    (allSites ?? []).map(async (s) => {
+  // 만촌 site_id로 planting_records 조회
+  const manchRecords = await Promise.all(
+    (manch ?? []).map(async (s) => {
       const { count } = await supabase.from('planting_records').select('*', { count: 'exact', head: true }).eq('site_id', s.id)
-      return { site_name: s.site_name, site_code: s.site_code, status: s.status, planting_count: count }
+      return { id: s.id, site_name: s.site_name, site_code: s.site_code, status: s.status, planting_count: count }
     })
   )
 
-  // planting_count 0인 현장만 추출
-  const emptySites = siteStats.filter(s => (s.planting_count ?? 0) === 0)
+  // 대시보드 sites 쿼리 (status active/closed)에서 상위 5개
+  const { data: dashSites } = await supabase
+    .from('sites')
+    .select('id, site_name, site_code, status')
+    .in('status', ['active', 'closed'])
+    .order('created_at', { ascending: false })
+    .limit(5)
 
-  return NextResponse.json({ siteCount, plantingCount, emptySites, totalSiteStats: siteStats.length })
+  return NextResponse.json({ siteCount, plantingCount, manchRecords, dashSites })
 }
