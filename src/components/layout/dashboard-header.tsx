@@ -9,7 +9,7 @@ const pageTitles: Record<string, string> = {
   '/dashboard': '현장 하자율 예측 분석',
   '/plantings': '식재 기록',
   '/sites': '현장 관리',
-  '/contractors': '시공사 관리',
+  '/contractors': '협력사 관리',
   '/species': '수종 관리',
   '/settings': '설정',
 }
