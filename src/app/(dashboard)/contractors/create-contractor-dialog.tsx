@@ -39,11 +39,11 @@ export function CreateContractorDialog({ organizations }: { organizations: Organ
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button />}>
         <Plus className="mr-2 h-4 w-4" />
-        시공사 등록
+        협력사 등록
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>시공사 등록</DialogTitle>
+          <DialogTitle>협력사 등록</DialogTitle>
         </DialogHeader>
         <form ref={formRef} action={action} className="space-y-4">
 
