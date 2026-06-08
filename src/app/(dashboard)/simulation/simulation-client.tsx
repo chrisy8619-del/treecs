@@ -27,6 +27,7 @@ export type PlantingRow = {
   expected_reserve_cost: number | null
   risk_level: string | null
   planting_season: string | null
+  planting_date: string | null
   contractor_name: string | null
   notes: string | null
 }
@@ -221,6 +222,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
     effectSummary: string
     prioritySpecies: string
     seasonalImpact: string
+    seasonStats: { season: string; rate: number; qty: number; label: string }[]
     managementPoints: string
   } | null>(null)
   const [aiGenerating, setAiGenerating] = useState(false)
@@ -286,29 +288,78 @@ export function SimulationClient({ sites, substitutions }: Props) {
         : priorityList.map((s, i) => `${i + 1}. ${s.name}(${(s.rate * 100).toFixed(1)}%)`).join('  ') +
           ' 순으로 대체 우선순위가 높습니다.'
 
-      // 3. 계절 영향 — 수종 기준 집계 (미상 제외하고 실제 계절 데이터만 비교)
-      const seasonMap: Record<string, { qty: number; defectSum: number }> = {}
-      for (const s of uniqueSpecies) {
-        const season = s.season ?? '미상'
-        if (!seasonMap[season]) seasonMap[season] = { qty: 0, defectSum: 0 }
-        seasonMap[season].qty += s.qty
-        seasonMap[season].defectSum += s.rate * s.qty
+      // 3. 식재 시기 영향 분석
+      // 식재일자(planting_date) 우선 → 없으면 planting_season 폴백
+      function getSeasonFromDate(dateStr: string | null): string | null {
+        if (!dateStr) return null
+        const month = new Date(dateStr).getMonth() + 1
+        if (month >= 3 && month <= 5) return 'spring'
+        if (month >= 6 && month <= 8) return 'summer'
+        if (month >= 9 && month <= 11) return 'fall'
+        return 'winter'
       }
       const seasonLabel: Record<string, string> = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울' }
-      const seasonStats = Object.entries(seasonMap)
-        .filter(([k]) => k !== '미상')
-        .map(([k, v]) => ({ season: seasonLabel[k] ?? k, rate: v.qty > 0 ? v.defectSum / v.qty : 0, qty: v.qty }))
-        .filter((s) => s.qty > 0)
+
+      // 행 단위로 계절 결정 (planting_date → planting_season 순)
+      const rowsWithSeason = siteRows.map((r) => ({
+        ...r,
+        resolvedSeason: getSeasonFromDate(r.planting_date) ?? r.planting_season ?? null,
+      }))
+
+      // 계절별 집계 (수량 가중, 미상 제외)
+      const seasonBuckets: Record<string, { qty: number; defectSum: number; species: Map<string, { qty: number; defectSum: number }> }> = {}
+      let seasonKnownQty = 0
+      for (const r of rowsWithSeason) {
+        if (!r.resolvedSeason || r.expected_defect_rate == null) continue
+        const s = r.resolvedSeason
+        if (!seasonBuckets[s]) seasonBuckets[s] = { qty: 0, defectSum: 0, species: new Map() }
+        seasonBuckets[s].qty += r.quantity_planted
+        seasonBuckets[s].defectSum += r.expected_defect_rate * r.quantity_planted
+        seasonKnownQty += r.quantity_planted
+        // 수종별 집계 (하이리스크 수종 파악용)
+        const spName = r.species_name ?? '알 수 없음'
+        const prev = seasonBuckets[s].species.get(spName) ?? { qty: 0, defectSum: 0 }
+        seasonBuckets[s].species.set(spName, {
+          qty: prev.qty + r.quantity_planted,
+          defectSum: prev.defectSum + r.expected_defect_rate * r.quantity_planted,
+        })
+      }
+
+      const seasonStats = Object.entries(seasonBuckets)
+        .map(([k, v]) => ({
+          season: k,
+          label: seasonLabel[k] ?? k,
+          rate: v.qty > 0 ? v.defectSum / v.qty : 0,
+          qty: v.qty,
+          // 해당 계절에서 하자율 높은 수종 상위 2개
+          topSpecies: Array.from(v.species.entries())
+            .map(([name, sv]) => ({ name, rate: sv.qty > 0 ? sv.defectSum / sv.qty : 0 }))
+            .sort((a, b) => b.rate - a.rate)
+            .slice(0, 2)
+            .map((s) => s.name),
+        }))
         .sort((a, b) => b.rate - a.rate)
-      const unknownQty = seasonMap['미상']?.qty ?? 0
-      const knownRatio = originalTotalQty > 0 ? ((originalTotalQty - unknownQty) / originalTotalQty * 100).toFixed(0) : '0'
-      const seasonalImpact = seasonStats.length < 2
-        ? unknownQty > 0
-          ? `전체 수량 중 ${knownRatio}%에만 식재 계절 데이터가 있어 계절별 비교가 어렵습니다. 엑셀 '계절(수식)' 컬럼을 확인하십시오.`
-          : '식재 계절 데이터가 없습니다. 엑셀 업로드 시 계절(수식) 컬럼을 입력하면 분석할 수 있습니다.'
-        : `${seasonStats[0].season} 식재 수종의 평균 하자율(${(seasonStats[0].rate * 100).toFixed(1)}%)이 가장 높습니다. ` +
-          `${seasonStats[seasonStats.length - 1].season} 식재(${(seasonStats[seasonStats.length - 1].rate * 100).toFixed(1)}%) 대비 ` +
-          `${((seasonStats[0].rate - seasonStats[seasonStats.length - 1].rate) * 100).toFixed(1)}%p 차이가 있어 식재 시기 조정을 검토하십시오.`
+
+      const overallRate = originalTotalQty > 0
+        ? siteRows.reduce((s, r) => s + (r.expected_defect_rate ?? 0) * r.quantity_planted, 0) / originalTotalQty
+        : 0
+
+      let seasonalImpact: string
+      if (seasonStats.length === 0) {
+        seasonalImpact = '식재일자 데이터가 없어 식재 시기별 분석을 수행할 수 없습니다. 엑셀 업로드 시 식재시기 컬럼을 입력하면 자동으로 분석됩니다.'
+      } else if (seasonStats.length === 1) {
+        const s = seasonStats[0]
+        const diff = ((s.rate - overallRate) * 100).toFixed(1)
+        seasonalImpact = `${s.label} 식재 수목의 하자율(${(s.rate * 100).toFixed(1)}%)이 전체 평균(${(overallRate * 100).toFixed(1)}%) 대비 ${diff}% ${Number(diff) >= 0 ? '높게' : '낮게'} 나타났습니다.` +
+          (s.topSpecies.length > 0 ? ` ${s.topSpecies.join(', ')}에서 집중적으로 발생했습니다.` : '')
+      } else {
+        const worst = seasonStats[0]
+        const best = seasonStats[seasonStats.length - 1]
+        const diff = ((worst.rate - overallRate) * 100).toFixed(1)
+        seasonalImpact = `${worst.label} 식재 수목의 하자율이 가장 높으며, 전체 평균 대비 ${diff}% 높게 나타났습니다.` +
+          (worst.topSpecies.length > 0 ? ` ${worst.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '') +
+          ` ${best.label} 식재(${(best.rate * 100).toFixed(1)}%) 대비 ${((worst.rate - best.rate) * 100).toFixed(1)}%p 차이로, 식재 시기 조정을 검토하십시오.`
+      }
 
       // 4. 관리 포인트 — 수종 중복 제거된 riskCounts 사용
       const { high: highCount, mid: midCount, low: lowCount } = riskCounts
@@ -326,7 +377,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
         managementPoints += `저위험 수종 비율을 높이기 위한 수종 교체를 검토하십시오.`
       }
 
-      setAiAnalysis({ effectSummary, prioritySpecies, seasonalImpact, managementPoints })
+      setAiAnalysis({ effectSummary, prioritySpecies, seasonalImpact, seasonStats, managementPoints })
       setAiGenerating(false)
     }, 800)
   }
@@ -563,6 +614,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
             )}
           </div>
           <div className="grid grid-cols-4 divide-x text-xs">
+            {/* 대체 효과 요약 */}
             {[
               {
                 title: '대체 효과 요약',
@@ -576,20 +628,8 @@ export function SimulationClient({ sites, substitutions }: Props) {
                 content: aiAnalysis?.prioritySpecies,
                 placeholder: '하자율이 높고 대체 효과가 큰 수종 순으로 우선순위를 제시합니다.',
               },
-              {
-                title: '계절 영향',
-                icon: <Leaf className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />,
-                content: aiAnalysis?.seasonalImpact,
-                placeholder: '식재 계절에 따른 하자율 영향 분석 결과를 표시합니다.',
-              },
-              {
-                title: '관리 포인트',
-                icon: <TreePine className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-emerald-600' : 'text-gray-400'}`} />,
-                content: aiAnalysis?.managementPoints,
-                placeholder: '수목 관리 및 하자 예방을 위한 핵심 포인트를 안내합니다.',
-              },
             ].map((box) => (
-              <div key={box.title} className={`px-4 py-3 transition-colors ${aiAnalysis ? 'bg-white' : ''}`}>
+              <div key={box.title} className="px-4 py-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   {box.icon}
                   <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>{box.title}</span>
@@ -607,6 +647,73 @@ export function SimulationClient({ sites, substitutions }: Props) {
                 )}
               </div>
             ))}
+
+            {/* 식재 시기 영향 분석 — 바 차트 포함 */}
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Leaf className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>식재 시기 영향 분석</span>
+              </div>
+              {aiGenerating ? (
+                <div className="space-y-1.5">
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                  <div className="h-16 bg-gray-100 rounded animate-pulse mt-2" />
+                </div>
+              ) : aiAnalysis ? (
+                <div className="space-y-2">
+                  <p className="text-gray-700 leading-relaxed">{aiAnalysis.seasonalImpact}</p>
+                  {aiAnalysis.seasonStats.length > 0 && (
+                    <div className="mt-2 space-y-1.5">
+                      {(() => {
+                        const maxRate = Math.max(...aiAnalysis.seasonStats.map((s) => s.rate), 0.001)
+                        const ORDER = ['spring', 'summer', 'fall', 'winter']
+                        const sorted = [...aiAnalysis.seasonStats].sort(
+                          (a, b) => ORDER.indexOf(a.season) - ORDER.indexOf(b.season)
+                        )
+                        return sorted.map((s) => (
+                          <div key={s.season} className="flex items-center gap-2">
+                            <span className="w-6 text-gray-500 shrink-0">{s.label}</span>
+                            <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                              <div
+                                className={`h-3 rounded-full transition-all duration-500 ${
+                                  s.rate === maxRate ? 'bg-red-400' : 'bg-green-400'
+                                }`}
+                                style={{ width: `${Math.round((s.rate / maxRate) * 100)}%` }}
+                              />
+                            </div>
+                            <span className={`w-10 text-right font-medium shrink-0 ${s.rate === maxRate ? 'text-red-600' : 'text-gray-600'}`}>
+                              {(s.rate * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-400 leading-relaxed">식재일자 기반으로 계절별 하자율을 자동 분석합니다.</p>
+              )}
+            </div>
+
+            {/* 관리 포인트 */}
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <TreePine className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-emerald-600' : 'text-gray-400'}`} />
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>관리 포인트</span>
+              </div>
+              {aiGenerating ? (
+                <div className="space-y-1.5">
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/5" />
+                </div>
+              ) : aiAnalysis?.managementPoints ? (
+                <p className="text-gray-700 leading-relaxed">{aiAnalysis.managementPoints}</p>
+              ) : (
+                <p className="text-gray-400 leading-relaxed">수목 관리 및 하자 예방을 위한 핵심 포인트를 안내합니다.</p>
+              )}
+            </div>
           </div>
         </div>
 
