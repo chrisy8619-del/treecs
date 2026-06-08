@@ -30,7 +30,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 ]
 
 export function SpeciesTabs({ species, stats, isSuperadmin }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>('list')
+  const [activeTab, setActiveTab] = useState<TabId>('stats')
 
   return (
     <div className="space-y-4">

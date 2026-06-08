@@ -31,13 +31,13 @@ import { logout } from '@/app/actions/auth'
 const navMain = [
   { title: '대시보드', href: '/simulation', icon: LayoutDashboard },
   { title: '분석', href: '/analytics', icon: BarChart3 },
+  { title: '수종 관리', href: '/species', icon: Leaf },
 ]
 
 const navMaster = [
   { title: '현장 정보', href: '/dashboard', icon: Building2 },
   { title: '현장 관리', href: '/sites', icon: Building2 },
   { title: '협력사 관리', href: '/contractors', icon: Users },
-  { title: '수종 관리', href: '/species', icon: Leaf },
   { title: '식재 기록', href: '/plantings', icon: TreePine },
   { title: '설정', href: '/settings', icon: Settings },
 ]
