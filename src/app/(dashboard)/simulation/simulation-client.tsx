@@ -336,7 +336,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
           <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
             <Image src="/logo.png" alt="TreeCS" width={32} height={32} className="object-contain" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">현장 하자율 예측 및 대체 수종 시뮬레이션</h1>
+          <h1 className="text-xl font-bold tracking-tight">조경 AI플랫폼 대시보드</h1>
         </div>
         <div className="flex items-center gap-2">
           <button
