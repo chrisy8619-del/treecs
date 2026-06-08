@@ -120,8 +120,11 @@ export function SimulationClient({ sites, substitutions }: Props) {
   const subMap = useMemo(() => {
     const map = new Map<string, { name: string; rate: number; isAuto?: boolean }[]>()
 
-    // DB 등록 데이터 우선 반영
-    for (const [k, v] of dbSubMap) map.set(k, v.map((s) => ({ ...s, isAuto: false })))
+    // DB 등록 데이터 우선 반영 (하자율 낮은 순 상위 3개)
+    for (const [k, v] of dbSubMap) {
+      const sorted = [...v].sort((a, b) => a.rate - b.rate).slice(0, 3)
+      map.set(k, sorted.map((s) => ({ ...s, isAuto: false })))
+    }
 
     // 현장 내 저위험 수종 목록 (하자율 0 초과인 수종만, 중복 제거)
     const lowRiskSpecies = Array.from(
@@ -132,12 +135,12 @@ export function SimulationClient({ sites, substitutions }: Props) {
       ).values()
     ).sort((a, b) => a.rate - b.rate)  // 하자율 낮은 순
 
-    // 고위험/중위험 수종에 DB 등록 없으면 자동 추천 추가
+    // 고위험/중위험 수종에 DB 등록 없으면 자동 추천 상위 3개 추가
     for (const r of siteRows) {
       if (!r.species_name) continue
       if (r.risk_level !== '고위험' && r.risk_level !== '중위험') continue
       if (map.has(r.species_name) && map.get(r.species_name)!.length > 0) continue
-      const candidates = lowRiskSpecies.filter((s) => s.name !== r.species_name)
+      const candidates = lowRiskSpecies.filter((s) => s.name !== r.species_name).slice(0, 3)
       if (candidates.length > 0) {
         map.set(r.species_name, candidates.map((s) => ({ ...s, isAuto: true })))
       }

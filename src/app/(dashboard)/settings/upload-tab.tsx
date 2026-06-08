@@ -7,6 +7,7 @@ import {
   uploadInspectionResults,
   type UploadResult,
 } from '@/app/actions/upload'
+import { uploadSubstitutions } from '@/app/actions/substitution'
 import { BATCH_SIZE } from '@/lib/upload-config'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +31,7 @@ type UploadLog = {
 }
 
 type PreviewRow = Record<string, string | number | null>
-type UploadType = 'planting' | 'inspection' | 'defect_analysis'
+type UploadType = 'planting' | 'inspection' | 'defect_analysis' | 'substitution'
 
 const UPLOAD_TYPES: { value: UploadType; label: string; description: string; columns: string[] }[] = [
   {
@@ -38,6 +39,12 @@ const UPLOAD_TYPES: { value: UploadType; label: string; description: string; col
     label: '하자율 예측 분석',
     description: '현장별 수목 명세와 단가·예상하자율을 업로드합니다. 예비비가 자동 계산됩니다.',
     columns: ['날짜', '현장코드', '현장명', '준공일', '식재시기', '협력사', '수종명', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)', '수량', '하자수량', '지역', '단가', '계절(수식)', '규격', '리스크등급', '권장조치', '세부조치', '예상 예비비(₩)'],
+  },
+  {
+    value: 'substitution',
+    label: '대체수종 등록',
+    description: '고위험·중위험 수종의 대체 수종과 개선 하자율을 일괄 등록합니다.',
+    columns: ['원수종명', '대체수종명', '개선하자율(%)'],
   },
   {
     value: 'planting',
@@ -140,12 +147,13 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
   const [uploadType, setUploadType] = useState<UploadType>('defect_analysis')
   const [isDragging, setIsDragging] = useState(false)
   const [fileName, setFileName] = useState('')
+  const [rawFile, setRawFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<{
     headers: string[]
     rows: PreviewRow[]
     allRows: PreviewRow[]
     defectAnalysisData?: {
-      rows: PreviewRow[]   // 클라이언트 파싱 완료된 행 (JSON 전송용)
+      rows: PreviewRow[]
       totalRows: number
     }
   } | null>(null)
@@ -161,6 +169,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
       return
     }
     setFileName(file.name)
+    setRawFile(file)
     setResult(null)
 
     const reader = new FileReader()
@@ -251,6 +260,25 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
           failCount: totalFail,
           errors: allErrors.slice(0, 20),
         }
+      } else if (uploadType === 'substitution') {
+        // rawFile을 base64로 변환해 기존 uploadSubstitutions 액션 재사용
+        const file = rawFile
+        if (!file) { res = { success: false, totalRows: 0, successCount: 0, failCount: 0, errors: ['파일을 다시 선택해주세요.'] } }
+        else {
+          const ab = await file.arrayBuffer()
+          const bytes = new Uint8Array(ab)
+          let binary = ''
+          bytes.forEach((b) => (binary += String.fromCharCode(b)))
+          const base64 = btoa(binary)
+          const subResult = await uploadSubstitutions(base64)
+          res = {
+            success: subResult.success,
+            totalRows: preview.allRows.length,
+            successCount: subResult.successCount,
+            failCount: subResult.failCount,
+            errors: subResult.errors,
+          }
+        }
       } else if (uploadType === 'planting') {
         res = await uploadPlantingRecords(preview.allRows as never)
       } else {
@@ -267,12 +295,25 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
   function handleReset() {
     setPreview(null)
     setFileName('')
+    setRawFile(null)
     setResult(null)
     setBatchProgress(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
   function downloadTemplate() {
+    if (uploadType === 'substitution') {
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['원수종명', '대체수종명', '개선하자율(%)'],
+        ['서양측백', '느티나무', 15.0],
+        ['이팝나무', '왕벚나무', 12.5],
+      ])
+      ws['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 16 }]
+      XLSX.utils.book_append_sheet(wb, ws, '대체수종매핑')
+      XLSX.writeFile(wb, '대체수종등록_양식.xlsx')
+      return
+    }
     if (uploadType === 'defect_analysis') {
       // 새 flat 구조 양식 (1행 헤더 + 샘플 데이터 1행)
       const HEADERS = [
