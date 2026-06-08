@@ -51,6 +51,7 @@ export default async function SpeciesPage() {
       speciesNameKo,
       groupName: v.groupName,
       totalQty: v.totalQty,
+      totalDefectQty: v.totalDefectQty,
       defectRate: v.totalDefectQty / v.totalQty,
     }))
 
