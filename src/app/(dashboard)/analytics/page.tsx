@@ -504,6 +504,23 @@ export default async function AnalyticsPage() {
             </Card>
           </div>
 
+          {/* 수종별 계절 히트맵 */}
+          {heatmapData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  수종별 계절 하자율 히트맵
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    식재시기 기준 · 상위 {heatmapData.length}종
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SpeciesSeasonHeatmap data={heatmapData} />
+              </CardContent>
+            </Card>
+          )}
+
           {/* 3행: 현장별 예비비 + 현장별 리스크 현황 */}
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
@@ -559,23 +576,6 @@ export default async function AnalyticsPage() {
               </CardContent>
             </Card>
           </div>
-
-          {/* 수종별 계절 히트맵 */}
-          {heatmapData.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  수종별 계절 하자율 히트맵
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    식재시기 기준 · 상위 {heatmapData.length}종
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SpeciesSeasonHeatmap data={heatmapData} />
-              </CardContent>
-            </Card>
-          )}
 
           {/* 현장별 분석 테이블 — 전체 현장 20개씩 페이지네이션 */}
           {(siteData.length > 0 || siteReserveData.length > 0) && (
