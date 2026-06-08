@@ -1,39 +1,58 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { CreateSpeciesDialog } from './create-species-dialog'
-import { SpeciesToggleButton } from './toggle-button'
-import { SpeciesDeleteButton } from './delete-button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SpeciesTabs } from './species-tabs'
+import type { SpeciesStat } from './species-stats-tab'
 
 export default async function SpeciesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: species }, { data: groups }, { data: profile }] = await Promise.all([
-    supabase
-      .from('species')
-      .select('id, species_name_ko, species_name_en, species_code, scientific_name, is_active, species_groups(group_name)')
-      .order('species_name_ko'),
-    supabase
-      .from('species_groups')
-      .select('id, group_name, group_code')
-      .order('group_name'),
-    supabase.from('profiles').select('role').eq('id', user.id).single(),
-  ])
+  const [{ data: species }, { data: groups }, { data: profile }, { data: plantingData }] =
+    await Promise.all([
+      supabase
+        .from('species')
+        .select('id, species_name_ko, species_name_en, species_code, scientific_name, is_active, species_groups(group_name)')
+        .order('species_name_ko'),
+      supabase
+        .from('species_groups')
+        .select('id, group_name, group_code')
+        .order('group_name'),
+      supabase.from('profiles').select('role').eq('id', user.id).single(),
+      supabase
+        .from('planting_records')
+        .select('quantity_planted, expected_defect_qty, species(species_name_ko, species_groups(group_name))')
+        .not('expected_defect_qty', 'is', null),
+    ])
+
   const isSuperadmin = profile?.role === 'superadmin'
 
-  const active = species?.filter((s) => s.is_active) ?? []
-  const inactive = species?.filter((s) => !s.is_active) ?? []
+  // 수종별 집계 → SpeciesStat[]
+  type PlantingSpecies = { species_name_ko: string; species_groups: { group_name: string }[] | { group_name: string } | null } | null
+  const aggMap = new Map<string, { groupName: string | null; totalQty: number; totalDefectQty: number }>()
+  for (const row of plantingData ?? []) {
+    const sp = (Array.isArray(row.species) ? row.species[0] : row.species) as unknown as PlantingSpecies
+    const name = sp?.species_name_ko
+    if (!name) continue
+    const groupRaw = sp?.species_groups
+    const groupName = Array.isArray(groupRaw) ? (groupRaw[0]?.group_name ?? null) : (groupRaw?.group_name ?? null)
+    const prev = aggMap.get(name) ?? { groupName, totalQty: 0, totalDefectQty: 0 }
+    aggMap.set(name, {
+      groupName: prev.groupName ?? groupName,
+      totalQty: prev.totalQty + (row.quantity_planted ?? 0),
+      totalDefectQty: prev.totalDefectQty + (row.expected_defect_qty ?? 0),
+    })
+  }
+
+  const stats: SpeciesStat[] = Array.from(aggMap.entries())
+    .filter(([, v]) => v.totalQty > 0)
+    .map(([speciesNameKo, v]) => ({
+      speciesNameKo,
+      groupName: v.groupName,
+      totalQty: v.totalQty,
+      defectRate: v.totalDefectQty / v.totalQty,
+    }))
 
   return (
     <div className="space-y-6">
@@ -45,63 +64,11 @@ export default async function SpeciesPage() {
         <CreateSpeciesDialog groups={groups ?? []} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            수종 목록
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              활성 {active.length}종 · 비활성 {inactive.length}종
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {species && species.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>수종명(한글)</TableHead>
-                  <TableHead>수종코드</TableHead>
-                  <TableHead>수종명(영문)</TableHead>
-                  <TableHead>학명</TableHead>
-                  <TableHead>그룹</TableHead>
-                  <TableHead>상태</TableHead>
-                  <TableHead className="w-24" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {species.map((s) => {
-                  const group = Array.isArray(s.species_groups) ? s.species_groups[0] : s.species_groups
-                  return (
-                    <TableRow key={s.id}>
-                      <TableCell className="font-medium">{s.species_name_ko}</TableCell>
-                      <TableCell className="text-muted-foreground text-xs">{s.species_code}</TableCell>
-                      <TableCell>{s.species_name_en ?? '-'}</TableCell>
-                      <TableCell className="italic text-sm">{s.scientific_name ?? '-'}</TableCell>
-                      <TableCell>{group?.group_name ?? '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant={s.is_active ? 'default' : 'outline'}>
-                          {s.is_active ? '활성' : '비활성'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <SpeciesToggleButton id={s.id} isActive={s.is_active} />
-                          {isSuperadmin && <SpeciesDeleteButton id={s.id} />}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-              <p className="text-sm">등록된 수종이 없습니다.</p>
-              <p className="text-xs mt-1">우측 상단 &apos;수종 등록&apos; 버튼으로 추가하세요.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SpeciesTabs
+        species={species ?? []}
+        stats={stats}
+        isSuperadmin={isSuperadmin}
+      />
     </div>
   )
 }
