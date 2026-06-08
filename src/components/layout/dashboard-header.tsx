@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 const pageTitles: Record<string, string> = {
   '/simulation': '대시보드',
   '/analytics': '분석',
-  '/dashboard': '현장 하자율 예측 분석',
+  '/dashboard': '현장 정보',
   '/plantings': '식재 기록',
   '/sites': '현장 관리',
   '/contractors': '협력사 관리',
