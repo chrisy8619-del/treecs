@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
       expected_defect_qty,
       expected_reserve_cost,
       risk_level,
+      planting_season,
       notes,
       contractors ( contractor_name ),
       species ( species_name_ko ),

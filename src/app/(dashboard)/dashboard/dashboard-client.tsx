@@ -37,6 +37,7 @@ export type PlantingRow = {
   expected_defect_qty: number | null
   expected_reserve_cost: number | null
   risk_level: string | null
+  planting_season: string | null
   notes: string | null
   contractor_name: string | null
   species_name: string | null
@@ -217,6 +218,128 @@ function buildTemplateWorkbook(site: SiteOption | null, rows: PlantingRow[]) {
   ]
   XLSX.utils.book_append_sheet(wb, ws, '하자율 예측분석')
   return wb
+}
+
+// ─── 수종×식재계절 하자율 히트맵 ────────────────────────────
+const SEASONS: { code: string; label: string }[] = [
+  { code: 'spring', label: '봄' },
+  { code: 'summer', label: '여름' },
+  { code: 'fall', label: '가을' },
+  { code: 'winter', label: '겨울' },
+]
+
+// 하자율 값에 따른 셀 배경색 (이미지와 동일한 네이비→하늘 스펙트럼)
+function heatmapCellStyle(rate: number | null): { bg: string; text: string } {
+  if (rate === null) return { bg: '#f3f4f6', text: '#9ca3af' }
+  if (rate === 0) return { bg: '#f3f4f6', text: '#9ca3af' }
+  if (rate >= 0.50) return { bg: '#0f2d4a', text: '#ffffff' }
+  if (rate >= 0.40) return { bg: '#1a3a5c', text: '#ffffff' }
+  if (rate >= 0.30) return { bg: '#1e4976', text: '#ffffff' }
+  if (rate >= 0.20) return { bg: '#2563a8', text: '#ffffff' }
+  if (rate >= 0.15) return { bg: '#3b82c4', text: '#ffffff' }
+  if (rate >= 0.10) return { bg: '#60a5d8', text: '#ffffff' }
+  if (rate >= 0.05) return { bg: '#93c5e8', text: '#1e3a5c' }
+  return { bg: '#c8dff2', text: '#1e3a5c' }
+}
+
+function SpeciesSeasonHeatmap({ rows }: { rows: PlantingRow[] }) {
+  // planting_season이 있는 행만 사용
+  const validRows = rows.filter((r) => r.species_name && r.planting_season)
+
+  // 데이터가 없을 경우 숨김 처리
+  if (validRows.length === 0) return null
+
+  // 수종 목록 (수량 기준 내림차순 정렬)
+  const speciesQtyMap = new Map<string, number>()
+  for (const r of validRows) {
+    const name = r.species_name!
+    speciesQtyMap.set(name, (speciesQtyMap.get(name) ?? 0) + r.quantity_planted)
+  }
+  const speciesList = [...speciesQtyMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name)
+
+  // 수종×계절 집계 { "느티나무:spring": { totalQty, defectQty } }
+  const cellMap = new Map<string, { totalQty: number; defectQty: number }>()
+  for (const r of validRows) {
+    const key = `${r.species_name}:${r.planting_season}`
+    const cur = cellMap.get(key) ?? { totalQty: 0, defectQty: 0 }
+    cur.totalQty += r.quantity_planted
+    cur.defectQty += r.expected_defect_qty ?? 0
+    cellMap.set(key, cur)
+  }
+
+  return (
+    <div className="border rounded-lg overflow-hidden bg-white">
+      <div className="px-4 py-3 border-b bg-[#1a3a2a]">
+        <h3 className="text-sm font-semibold text-white">수종별 식재 계절 하자율 히트맵</h3>
+        <p className="text-xs text-green-200 mt-0.5">식재 계절 기준 (조사 계절의 한 계절 이전)</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className="px-4 py-2.5 text-left text-gray-600 font-semibold bg-gray-50 border-b border-r min-w-[120px]">
+                수종명
+              </th>
+              {SEASONS.map((s) => (
+                <th key={s.code} className="px-4 py-2.5 text-center text-gray-700 font-semibold bg-gray-50 border-b border-r min-w-[110px]">
+                  {s.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {speciesList.map((species, idx) => (
+              <tr key={species} className={idx % 2 === 1 ? 'bg-gray-50/40' : ''}>
+                <td className="px-4 py-2 text-gray-800 font-medium border-b border-r whitespace-nowrap">
+                  {species}
+                </td>
+                {SEASONS.map((s) => {
+                  const cell = cellMap.get(`${species}:${s.code}`)
+                  const rate = cell && cell.totalQty > 0
+                    ? cell.defectQty / cell.totalQty
+                    : null
+                  const { bg, text } = heatmapCellStyle(rate)
+                  return (
+                    <td
+                      key={s.code}
+                      className="px-3 py-2 text-center border-b border-r"
+                      style={{ backgroundColor: bg, color: text }}
+                      title={cell ? `수량: ${cell.totalQty}주 / 하자: ${cell.defectQty}주` : '데이터 없음'}
+                    >
+                      {rate !== null ? (rate * 100).toFixed(1) + '%' : <span style={{ color: '#d1d5db' }}>-</span>}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* 범례 */}
+      <div className="px-4 py-2.5 border-t bg-gray-50 flex items-center gap-4 flex-wrap">
+        <span className="text-xs text-gray-500 font-medium">하자율</span>
+        <div className="flex items-center gap-1">
+          {[
+            { bg: '#c8dff2', label: '5% 미만' },
+            { bg: '#93c5e8', label: '5~10%' },
+            { bg: '#60a5d8', label: '10~15%' },
+            { bg: '#3b82c4', label: '15~20%' },
+            { bg: '#2563a8', label: '20~30%' },
+            { bg: '#1e4976', label: '30~40%' },
+            { bg: '#0f2d4a', label: '50% 이상' },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-1">
+              <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: item.bg }} />
+              <span className="text-xs text-gray-500">{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <span className="text-xs text-gray-400 ml-auto">셀에 마우스를 올리면 수량 상세 확인</span>
+      </div>
+    </div>
+  )
 }
 
 // ─── 컴포넌트 ─────────────────────────────────────────────
@@ -782,6 +905,9 @@ export function DashboardClient({ sites }: Props) {
             </>
           )}
         </div>
+
+        {/* ── 수종×식재계절 하자율 히트맵 ── */}
+        <SpeciesSeasonHeatmap rows={siteRows} />
 
         {/* ── 하단 요약 바 ── */}
         <div className="border rounded-lg bg-white px-6 py-4 flex items-center gap-8 flex-wrap">

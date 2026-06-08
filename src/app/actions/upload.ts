@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { SEASON_KO_TO_CODE } from '@/lib/season-utils'
+import { SEASON_KO_TO_CODE, defectSeasonToPlantingSeason } from '@/lib/season-utils'
 import { BATCH_SIZE } from '@/lib/upload-config'
 import * as XLSX from 'xlsx'
 
@@ -599,6 +599,10 @@ export async function uploadDefectAnalysis(
     const sebaejochi = String(row.세부조치 ?? '').trim()
     if (sebaejochi) notes_parts.push(`세부조치: ${sebaejochi}`)
 
+    // 계절(수식) P열 → 식재 계절 (한 계절 이전)
+    const defectSeasonKo = String(row[EXCEL_COL_MAP.SEASON] ?? '').trim()
+    const planting_season = defectSeasonKo ? defectSeasonToPlantingSeason(defectSeasonKo) : null
+
     const insertData: Record<string, unknown> = {
       organization_id: site.organization_id,
       site_id: site.id,
@@ -611,6 +615,7 @@ export async function uploadDefectAnalysis(
       expected_defect_rate: defect_rate,
       source_type: 'excel_import',
       notes: notes_parts.length > 0 ? notes_parts.join(' | ') : null,
+      planting_season,
     }
     if (defect_qty != null) insertData.expected_defect_qty = Math.round(defect_qty)
     if (reserve_cost != null) insertData.expected_reserve_cost = Math.round(reserve_cost)
