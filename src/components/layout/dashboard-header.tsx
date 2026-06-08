@@ -5,7 +5,7 @@ import { Separator } from '@/components/ui/separator'
 import { usePathname } from 'next/navigation'
 
 const pageTitles: Record<string, string> = {
-  '/analytics': '대시보드',
+  '/analytics': '분석',
   '/dashboard': '현장 하자율 예측 분석',
   '/plantings': '식재 기록',
   '/sites': '현장 관리',
@@ -17,7 +17,7 @@ const pageTitles: Record<string, string> = {
 export function DashboardHeader() {
   const pathname = usePathname()
   const base = '/' + pathname.split('/')[1]
-  const title = pageTitles[pathname] ?? pageTitles[base] ?? '대시보드'
+  const title = pageTitles[pathname] ?? pageTitles[base] ?? '분석'
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">

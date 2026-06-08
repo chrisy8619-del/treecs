@@ -296,7 +296,7 @@ export default async function AnalyticsPage() {
       {/* ── 상단 헤더 ── */}
       <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">대시보드</h1>
+          <h1 className="text-xl font-bold tracking-tight">분석</h1>
           <p className="text-xs text-green-200 mt-0.5">현장별 하자율 통계 및 리스크 분석 현황입니다.</p>
         </div>
       </div>
