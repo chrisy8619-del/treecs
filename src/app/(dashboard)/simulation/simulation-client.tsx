@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { uploadSubstitutions } from '@/app/actions/substitution'
 import { resolveSeasonCode, SEASON_CODE_TO_KO, SEASON_ORDER } from '@/lib/season-utils'
+import { getRecommendedSubstitutes, mapRegion } from '@/lib/species-knowledge'
 
 export type SiteOption = {
   id: string
@@ -327,7 +328,11 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
       riskLevel = `현재 전체 예상 하자율 ${(currentRate * 100).toFixed(2)}% — ${level} 수준입니다.`
     }
 
-    // 추천 사유: 선택된 수종별 개선 근거 또는 미선택 고위험 수종 안내
+    // 현장 지역 정보
+    const currentSite = sites.find((s) => s.id === selectedSiteId)
+    const siteRegion = mapRegion(currentSite?.region)
+
+    // 추천 사유: 선택된 수종별 개선 근거 또는 미선택 고위험 수종 + 지식DB 추천
     let recommendReason = ''
     if (hasSelection) {
       const lines = selectedEntries.map(([origName, subName]) => {
@@ -343,8 +348,35 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
         : '선택된 대체 수종의 하자율 데이터가 없습니다.'
     } else {
       const highMid = uniqueSpecies.filter((s) => (s.risk === '고위험' || s.risk === '중위험') && subMap.has(s.name))
-      if (highMid.length > 0) {
-        recommendReason = `${highMid.slice(0, 3).map((s) => s.name).join(', ')} 등 ${highMid.length}종에 대체 수종 후보가 있습니다. 하단 테이블에서 선택하면 실시간 절감 효과를 확인할 수 있습니다.`
+      const highMidAll = uniqueSpecies.filter((s) => s.risk === '고위험' || s.risk === '중위험')
+
+      // 지식DB 기반 추천: 고위험/중위험 수종별로 최대 3종 추천
+      const knowledgeLines = highMidAll.slice(0, 3).map((s) => {
+        const recs = getRecommendedSubstitutes(s.name, siteRegion, 3)
+        if (recs.length === 0) return null
+        const recNames = recs.map((r) => r.name).join(' · ')
+        return `${s.name}: ${recNames} 추천`
+      }).filter((l): l is string => !!l)
+
+      if (highMid.length > 0 || knowledgeLines.length > 0) {
+        const parts: string[] = []
+        if (highMid.length > 0) {
+          parts.push(`${highMid.slice(0, 3).map((s) => s.name).join(', ')} 등 ${highMid.length}종에 등록된 대체 수종 후보 있음`)
+        }
+        if (knowledgeLines.length > 0) {
+          parts.push(...knowledgeLines)
+        }
+        recommendReason = parts.join('  /  ')
+      } else if (highMidAll.length > 0) {
+        // 대체 후보는 없지만 고위험/중위험 수종은 있는 경우
+        const knowledgeFallback = highMidAll.slice(0, 3).map((s) => {
+          const recs = getRecommendedSubstitutes(s.name, siteRegion, 3)
+          if (recs.length === 0) return null
+          return `${s.name}: ${recs.map((r) => r.name).join(' · ')} 추천 (지역: ${siteRegion})`
+        }).filter((l): l is string => !!l)
+        recommendReason = knowledgeFallback.length > 0
+          ? knowledgeFallback.join('  /  ')
+          : '고위험·중위험 수종에 대한 대체 후보가 없습니다. 대체수종 등록 메뉴를 통해 등록하세요.'
       } else {
         recommendReason = '고위험·중위험 수종에 대한 대체 후보가 없습니다. 대체수종 등록 메뉴를 통해 등록하세요.'
       }
