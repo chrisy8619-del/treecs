@@ -43,6 +43,7 @@ export type SubstitutionMap = {
 type Props = {
   sites: SiteOption[]
   substitutions: SubstitutionMap[]
+  speciesAvgRate: Record<string, number>  // 전체 데이터 기준 수종별 평균 하자율
 }
 
 function riskConfig(rate: number | null) {
@@ -52,7 +53,7 @@ function riskConfig(rate: number | null) {
   return { label: '저위험', color: 'text-green-600', badge: 'bg-green-100 text-green-700', dot: 'bg-green-500' }
 }
 
-export function SimulationClient({ sites, substitutions }: Props) {
+export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props) {
   const subFileInputRef = useRef<HTMLInputElement>(null)
 
   const [selectedSiteId, setSelectedSiteId] = useState<string>(sites[0]?.id ?? '')
@@ -826,7 +827,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-[#1a3a2a] text-white">
-                  {['No.', '원수종', '수량 (주)', '기존 하자율', '리스크 등급', '대체 수종 선택', '개선 하자율', '저감 효과', '개선 후 예상 하자수량', '권장 조치', '세부 조치'].map((h) => (
+                  {['No.', '원수종', '수량 (주)', '수목하자율', '하자율(현재기준)', '리스크 등급', '대체 수종 선택', '개선 하자율', '저감 효과', '개선 후 예상 하자수량', '권장 조치', '세부 조치'].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -834,7 +835,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
               <tbody>
                 {tableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-12 text-gray-400">
+                    <td colSpan={12} className="text-center py-12 text-gray-400">
                       {loadingRows ? '데이터 불러오는 중...' : '현장을 선택하면 수목 데이터가 표시됩니다.'}
                     </td>
                   </tr>
@@ -842,6 +843,8 @@ export function SimulationClient({ sites, substitutions }: Props) {
                   const risk = riskConfig(row.expected_defect_rate)
                   const isLowRisk = row.risk_level === '저위험'
                   const hasSubOptions = row.substituteOptions.length > 0
+                  const speciesAvgRatePct = row.speciesName && speciesAvgRate[row.speciesName] != null
+                    ? (speciesAvgRate[row.speciesName] * 100).toFixed(2) + '%' : '-'
                   const originalRatePct = row.expected_defect_rate != null ? (row.expected_defect_rate * 100).toFixed(2) + '%' : '-'
                   const improvedRatePct = row.improvedRate != null ? (row.improvedRate * 100).toFixed(2) + '%' : '-'
                   const reductionPct = row.reduction != null && row.reduction > 0 ? '▼ ' + (row.reduction * 100).toFixed(2) + '%p' : '-'
@@ -851,6 +854,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
                       <td className="px-3 py-2 text-gray-400">{idx + 1}</td>
                       <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.speciesName || '-'}</td>
                       <td className="px-3 py-2 text-right text-gray-700">{row.quantity_planted.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right text-gray-500">{speciesAvgRatePct}</td>
                       <td className={`px-3 py-2 text-right font-medium ${risk.color}`}>{originalRatePct}</td>
                       <td className="px-3 py-2">
                         {row.expected_defect_rate != null ? (

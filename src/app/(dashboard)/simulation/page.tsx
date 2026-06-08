@@ -9,7 +9,7 @@ export default async function SimulationPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: sitesRaw }, { data: subsRaw }] = await Promise.all([
+  const [{ data: sitesRaw }, { data: subsRaw }, { data: plantingAvgRaw }] = await Promise.all([
     supabase
       .from('sites')
       .select('id, site_name, site_code, region, occupancy_date, organizations(name)')
@@ -24,6 +24,10 @@ export default async function SimulationPage() {
         original:original_species_id ( species_name_ko ),
         substitute:substitute_species_id ( species_name_ko )
       `),
+    supabase
+      .from('planting_records')
+      .select('quantity_planted, expected_defect_qty, species ( species_name_ko )')
+      .not('expected_defect_qty', 'is', null),
   ])
 
   const sites: SiteOption[] = (sitesRaw ?? []).map((s) => {
@@ -48,5 +52,23 @@ export default async function SimulationPage() {
     }
   }).filter((s) => s.original_species_name && s.substitute_species_name)
 
-  return <SimulationClient sites={sites} substitutions={substitutions} />
+  // 전체 데이터 기준 수종별 평균 하자율: SUM(하자수량)/SUM(수량) per 수종명
+  const aggMap = new Map<string, { qty: number; defect: number }>()
+  for (const row of plantingAvgRaw ?? []) {
+    const speciesArr = row.species
+    const species = Array.isArray(speciesArr) ? speciesArr[0] : speciesArr
+    const name = (species as { species_name_ko: string } | null)?.species_name_ko
+    if (!name) continue
+    const prev = aggMap.get(name) ?? { qty: 0, defect: 0 }
+    aggMap.set(name, {
+      qty: prev.qty + (row.quantity_planted ?? 0),
+      defect: prev.defect + (row.expected_defect_qty ?? 0),
+    })
+  }
+  const speciesAvgRate: Record<string, number> = {}
+  for (const [name, v] of aggMap) {
+    speciesAvgRate[name] = v.qty > 0 ? v.defect / v.qty : 0
+  }
+
+  return <SimulationClient sites={sites} substitutions={substitutions} speciesAvgRate={speciesAvgRate} />
 }
