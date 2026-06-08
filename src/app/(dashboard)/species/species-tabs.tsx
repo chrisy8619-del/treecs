@@ -25,8 +25,8 @@ type Props = {
 type TabId = 'list' | 'stats'
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'list', label: '수종 목록', icon: <List className="h-4 w-4" /> },
   { id: 'stats', label: '수목 현황', icon: <BarChart2 className="h-4 w-4" /> },
+  { id: 'list', label: '수종 목록', icon: <List className="h-4 w-4" /> },
 ]
 
 export function SpeciesTabs({ species, stats, isSuperadmin }: Props) {
