@@ -843,7 +843,7 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-[#1a3a2a] text-white">
-                  {['No.', '원수종', '수량 (주)', '수목하자율', '하자율(현재기준)', '리스크 등급', '대체 수종 선택', '개선 하자율', '저감 효과', '개선 후 예상 하자수량', '권장 조치', '세부 조치'].map((h) => (
+                  {['No.', '원수종', '수량 (주)', '하자율(현재기준)', '수목하자율', '리스크 등급', '대체 수종 선택', '개선 하자율', '저감 효과', '개선 후 예상 하자수량', '권장 조치', '세부 조치'].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -856,11 +856,13 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
                     </td>
                   </tr>
                 ) : tableRows.map((row, idx) => {
-                  const risk = riskConfig(row.expected_defect_rate)
+                  const speciesAvgRateVal = row.speciesName && speciesAvgRate[row.speciesName] != null
+                    ? speciesAvgRate[row.speciesName] : null
+                  const risk = riskConfig(speciesAvgRateVal)
                   const isLowRisk = row.risk_level === '저위험'
                   const hasSubOptions = row.substituteOptions.length > 0
-                  const speciesAvgRatePct = row.speciesName && speciesAvgRate[row.speciesName] != null
-                    ? (speciesAvgRate[row.speciesName] * 100).toFixed(2) + '%' : '-'
+                  const speciesAvgRatePct = speciesAvgRateVal != null
+                    ? (speciesAvgRateVal * 100).toFixed(2) + '%' : '-'
                   const originalRatePct = row.expected_defect_rate != null ? (row.expected_defect_rate * 100).toFixed(2) + '%' : '-'
                   const improvedRatePct = row.improvedRate != null ? (row.improvedRate * 100).toFixed(2) + '%' : '-'
                   const reductionPct = row.reduction != null && row.reduction > 0 ? '▼ ' + (row.reduction * 100).toFixed(2) + '%p' : '-'
@@ -870,8 +872,8 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
                       <td className="px-3 py-2 text-gray-400">{idx + 1}</td>
                       <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.speciesName || '-'}</td>
                       <td className="px-3 py-2 text-right text-gray-700">{row.quantity_planted.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right text-gray-500">{speciesAvgRatePct}</td>
-                      <td className={`px-3 py-2 text-right font-medium ${risk.color}`}>{originalRatePct}</td>
+                      <td className={`px-3 py-2 text-right font-medium text-gray-700`}>{originalRatePct}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${risk.color}`}>{speciesAvgRatePct}</td>
                       <td className="px-3 py-2">
                         {row.expected_defect_rate != null ? (
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${risk.badge}`}>
