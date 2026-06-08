@@ -586,7 +586,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
               </table>
             </div>
 
-            {/* KPI 카드 6개 — 하자율 3 + 비용 3 */}
+            {/* KPI 카드 3개 */}
             <div className="flex-1 grid grid-cols-3 gap-3">
               <div className="border rounded-lg bg-white px-4 py-3">
                 <div className="text-xs text-gray-500 mb-1">기존 예상 하자율</div>
@@ -633,38 +633,6 @@ export function SimulationClient({ sites, substitutions }: Props) {
                 <div className="text-xs text-gray-400 mt-1">
                   {reductionEffect != null && reductionEffect > 0
                     ? `예상 하자수량 ${Math.round((originalWeightedRate ?? 0) * originalTotalQty) - Math.round((improvedWeightedRate ?? 0) * originalTotalQty)} 주 감소`
-                    : '대체 수종 선택 시 계산'}
-                </div>
-              </div>
-              <div className="border rounded-lg bg-white px-4 py-3">
-                <div className="text-xs text-gray-500 mb-1">기존 예상 하자 관리비용</div>
-                <div className="text-xl font-bold text-gray-900">
-                  {originalTotalCost > 0 ? '₩' + originalTotalCost.toLocaleString() : '-'}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">단가 × 예상 하자수량 합계</div>
-              </div>
-              <div className="border rounded-lg bg-white px-4 py-3">
-                <div className="text-xs text-gray-500 mb-1">개선 후 예상 하자 관리비용</div>
-                <div className="text-xl font-bold text-gray-900">
-                  {improvedTotalCost != null ? '₩' + improvedTotalCost.toLocaleString() : '-'}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">대체 수종 선택 시 계산</div>
-              </div>
-              <div className="border rounded-lg bg-white px-4 py-3">
-                <div className="text-xs text-gray-500 mb-1">비용 절감액</div>
-                <div className="flex items-center gap-1 flex-wrap">
-                  {costReduction != null && costReduction > 0 ? (
-                    <>
-                      <TrendingDown className="h-5 w-5 text-green-500" />
-                      <span className="text-xl font-bold text-green-600">₩{costReduction.toLocaleString()}</span>
-                    </>
-                  ) : (
-                    <span className="text-xl font-bold text-gray-400">-</span>
-                  )}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {costReduction != null && costReduction > 0
-                    ? `${((costReduction / originalTotalCost) * 100).toFixed(1)}% 절감`
                     : '대체 수종 선택 시 계산'}
                 </div>
               </div>
