@@ -104,7 +104,8 @@ export function SimulationClient({ sites, substitutions }: Props) {
     setNameDropdownOpen(false)
   }
 
-  const subMap = useMemo(() => {
+  // DB 등록 대체수종 맵
+  const dbSubMap = useMemo(() => {
     const map = new Map<string, { name: string; rate: number }[]>()
     for (const s of substitutions) {
       const list = map.get(s.original_species_name) ?? []
@@ -113,6 +114,36 @@ export function SimulationClient({ sites, substitutions }: Props) {
     }
     return map
   }, [substitutions])
+
+  // 현장 내 저위험 수종을 고위험/중위험 수종의 대체 후보로 자동 추천
+  const subMap = useMemo(() => {
+    const map = new Map<string, { name: string; rate: number; isAuto?: boolean }[]>()
+
+    // DB 등록 데이터 우선 반영
+    for (const [k, v] of dbSubMap) map.set(k, v.map((s) => ({ ...s, isAuto: false })))
+
+    // 현장 내 저위험 수종 목록 (하자율 0 초과인 수종만, 중복 제거)
+    const lowRiskSpecies = Array.from(
+      new Map(
+        siteRows
+          .filter((r) => r.species_name && r.risk_level === '저위험' && (r.expected_defect_rate ?? 0) > 0)
+          .map((r) => [r.species_name!, { name: r.species_name!, rate: r.expected_defect_rate! }])
+      ).values()
+    ).sort((a, b) => a.rate - b.rate)  // 하자율 낮은 순
+
+    // 고위험/중위험 수종에 DB 등록 없으면 자동 추천 추가
+    for (const r of siteRows) {
+      if (!r.species_name) continue
+      if (r.risk_level !== '고위험' && r.risk_level !== '중위험') continue
+      if (map.has(r.species_name) && map.get(r.species_name)!.length > 0) continue
+      const candidates = lowRiskSpecies.filter((s) => s.name !== r.species_name)
+      if (candidates.length > 0) {
+        map.set(r.species_name, candidates.map((s) => ({ ...s, isAuto: true })))
+      }
+    }
+
+    return map
+  }, [dbSubMap, siteRows])
 
   const tableRows = useMemo(() => {
     return siteRows.map((r) => {
@@ -486,7 +517,9 @@ export function SimulationClient({ sites, substitutions }: Props) {
                             >
                               <option value="">대체 수종 선택</option>
                               {row.substituteOptions.map((opt) => (
-                                <option key={opt.name} value={opt.name}>{opt.name} ({(opt.rate * 100).toFixed(1)}%)</option>
+                                <option key={opt.name} value={opt.name}>
+                                  {opt.isAuto ? '▷ ' : ''}{opt.name} ({(opt.rate * 100).toFixed(1)}%){opt.isAuto ? ' *추천' : ''}
+                                </option>
                               ))}
                             </select>
                             <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
