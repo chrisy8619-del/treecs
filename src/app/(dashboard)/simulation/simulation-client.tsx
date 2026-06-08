@@ -23,6 +23,7 @@ export type PlantingRow = {
   id: string
   species_name: string | null
   quantity_planted: number
+  unit_price: number | null
   expected_defect_rate: number | null
   expected_defect_qty: number | null
   expected_reserve_cost: number | null
@@ -161,7 +162,11 @@ export function SimulationClient({ sites, substitutions }: Props) {
       const improvedRate = selectedSub?.rate ?? null
       const reduction = originalRate != null && improvedRate != null ? originalRate - improvedRate : null
       const improvedDefectQty = improvedRate != null ? Math.round(r.quantity_planted * improvedRate) : null
-      return { ...r, speciesName, substituteOptions, selectedSubstituteName: substituteName, improvedRate, reduction, improvedDefectQty }
+      // 개선 후 예상 하자 관리비용: 단가 × 개선 후 하자수량
+      const improvedReserveCost = r.unit_price != null && improvedDefectQty != null
+        ? r.unit_price * improvedDefectQty
+        : null
+      return { ...r, speciesName, substituteOptions, selectedSubstituteName: substituteName, improvedRate, reduction, improvedDefectQty, improvedReserveCost }
     })
   }, [siteRows, selectedSubstitutes, subMap])
 
@@ -188,6 +193,20 @@ export function SimulationClient({ sites, substitutions }: Props) {
 
   const reductionEffect = originalWeightedRate != null && improvedWeightedRate != null
     ? originalWeightedRate - improvedWeightedRate : null
+
+  // 비용 집계
+  const originalTotalCost = siteRows.reduce((s, r) => s + (r.expected_reserve_cost ?? 0), 0)
+  // 개선 후 비용: 대체 선택된 행은 improvedReserveCost, 나머지는 기존 비용
+  const improvedTotalCost = useMemo(() => {
+    const hasAnySubstitute = tableRows.some((r) => r.improvedReserveCost != null)
+    if (!hasAnySubstitute) return null
+    return tableRows.reduce((s, r) => {
+      if (r.improvedReserveCost != null) return s + r.improvedReserveCost
+      return s + (r.expected_reserve_cost ?? 0)
+    }, 0)
+  }, [tableRows])
+  const costReduction = originalTotalCost > 0 && improvedTotalCost != null
+    ? originalTotalCost - improvedTotalCost : null
 
   // 수종명 기준 중복 제거 후 리스크 집계
   const riskCounts = useMemo(() => {
@@ -220,46 +239,99 @@ export function SimulationClient({ sites, substitutions }: Props) {
 
   // AI 분석 상태
   const [aiAnalysis, setAiAnalysis] = useState<{
+    riskLevel: string
+    recommendReason: string
     effectSummary: string
-    prioritySpecies: string
+    actionGuide: string
     seasonalImpact: string
     seasonStats: { season: string; rate: number; qty: number; label: string }[]
-    managementPoints: string
   } | null>(null)
   const [aiGenerating, setAiGenerating] = useState(false)
 
-  function generateAiAnalysis() {
+  // 대체 수종 선택이 변경될 때마다 AI 분석 자동 업데이트 (최신 집계값 반영)
+  useEffect(() => {
+    if (!aiAnalysis) return
+    computeAiAnalysis()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [improvedWeightedRate, reductionEffect, costReduction])
+
+  function computeAiAnalysis() {
     if (siteRows.length === 0) return
-    setAiGenerating(true)
-    setAiAnalysis(null)
 
-    setTimeout(() => {
-      // 수종명 기준 중복 제거 (동일 수종 여러 행 → 수량 합산, 하자율은 수량 가중 평균)
-      const speciesAgg = new Map<string, { qty: number; defectSum: number; risk: string | null; season: string | null }>()
-      for (const r of siteRows) {
-        const key = r.species_name ?? `__no_name_${r.id}`
-        const prev = speciesAgg.get(key) ?? { qty: 0, defectSum: 0, risk: r.risk_level, season: r.planting_season }
-        speciesAgg.set(key, {
-          qty: prev.qty + r.quantity_planted,
-          defectSum: prev.defectSum + (r.expected_defect_rate ?? 0) * r.quantity_planted,
-          risk: prev.risk ?? r.risk_level,
-          season: prev.season ?? r.planting_season,
-        })
+    // 수종명 기준 중복 제거 (동일 수종 여러 행 → 수량 합산, 하자율 수량 가중 평균)
+    const speciesAgg = new Map<string, { qty: number; defectSum: number; risk: string | null; season: string | null }>()
+    for (const r of siteRows) {
+      const key = r.species_name ?? `__no_name_${r.id}`
+      const prev = speciesAgg.get(key) ?? { qty: 0, defectSum: 0, risk: r.risk_level, season: r.planting_season }
+      speciesAgg.set(key, {
+        qty: prev.qty + r.quantity_planted,
+        defectSum: prev.defectSum + (r.expected_defect_rate ?? 0) * r.quantity_planted,
+        risk: prev.risk ?? r.risk_level,
+        season: prev.season ?? r.planting_season,
+      })
+    }
+    const uniqueSpecies = Array.from(speciesAgg.entries()).map(([name, v]) => ({
+      name,
+      qty: v.qty,
+      rate: v.qty > 0 ? v.defectSum / v.qty : 0,
+      risk: v.risk,
+      season: v.season,
+    }))
+
+    // 현재 선택된 대체 수종 반영 후 하자율 계산
+    const selectedEntries = Object.entries(selectedSubstitutes).filter(([, v]) => !!v)
+    const hasSelection = selectedEntries.length > 0
+
+    // 위험도: 현재 선택 적용 후 가중평균 하자율로 리스크 수준 판정
+    const currentRate = improvedWeightedRate ?? originalWeightedRate
+    let riskLevel = ''
+    if (currentRate == null) {
+      riskLevel = '데이터가 부족하여 위험도를 판정할 수 없습니다.'
+    } else if (hasSelection) {
+      const level = currentRate >= 0.20 ? '고위험' : currentRate >= 0.10 ? '중위험' : '저위험'
+      riskLevel = `대체 수종 적용 후 전체 예상 하자율 ${(currentRate * 100).toFixed(2)}% — ${level} 수준입니다.`
+    } else {
+      const level = currentRate >= 0.20 ? '고위험' : currentRate >= 0.10 ? '중위험' : '저위험'
+      riskLevel = `현재 전체 예상 하자율 ${(currentRate * 100).toFixed(2)}% — ${level} 수준입니다.`
+    }
+
+    // 추천 사유: 선택된 수종별 개선 근거 또는 미선택 고위험 수종 안내
+    let recommendReason = ''
+    if (hasSelection) {
+      const lines = selectedEntries.map(([origName, subName]) => {
+        const origRow = uniqueSpecies.find((s) => s.name === origName)
+        const subOpts = subMap.get(origName) ?? []
+        const subOpt = subOpts.find((s) => s.name === subName)
+        if (!origRow || !subOpt) return null
+        const diff = origRow.rate - subOpt.rate
+        return `${origName}(${(origRow.rate * 100).toFixed(1)}%) → ${subName}(${(subOpt.rate * 100).toFixed(1)}%): ${(diff * 100).toFixed(1)}%p 개선`
+      }).filter((l): l is string => !!l)
+      recommendReason = lines.length > 0
+        ? lines.join('  /  ')
+        : '선택된 대체 수종의 하자율 데이터가 없습니다.'
+    } else {
+      const highMid = uniqueSpecies.filter((s) => (s.risk === '고위험' || s.risk === '중위험') && subMap.has(s.name))
+      if (highMid.length > 0) {
+        recommendReason = `${highMid.slice(0, 3).map((s) => s.name).join(', ')} 등 ${highMid.length}종에 대체 수종 후보가 있습니다. 하단 테이블에서 선택하면 실시간 절감 효과를 확인할 수 있습니다.`
+      } else {
+        recommendReason = '고위험·중위험 수종에 대한 대체 후보가 없습니다. 대체수종 등록 메뉴를 통해 등록하세요.'
       }
-      const uniqueSpecies = Array.from(speciesAgg.entries()).map(([name, v]) => ({
-        name,
-        qty: v.qty,
-        rate: v.qty > 0 ? v.defectSum / v.qty : 0,
-        risk: v.risk,
-        season: v.season,
-      }))
+    }
 
-      // 1. 대체 효과 요약 — 전체 수량 기준 분모 통일
+    // 예상 절감 효과: 현재 선택 기준 실제 절감율/절감액
+    let effectSummary = ''
+    if (hasSelection && reductionEffect != null && reductionEffect > 0) {
+      const reducedQty = Math.round((originalWeightedRate ?? 0) * originalTotalQty) - Math.round((improvedWeightedRate ?? 0) * originalTotalQty)
+      effectSummary = `현재 선택 기준 하자율 ${(reductionEffect * 100).toFixed(2)}%p 절감 (예상 하자수량 ${reducedQty}주 감소)`
+      if (costReduction != null && costReduction > 0) {
+        effectSummary += ` / 하자 관리비용 ₩${costReduction.toLocaleString()} 절감`
+      }
+    } else if (hasSelection) {
+      effectSummary = '선택된 대체 수종의 하자율이 원수종보다 높거나 동일합니다. 다른 수종을 선택해보세요.'
+    } else {
       const highMidSpecies = uniqueSpecies.filter((s) => s.risk === '고위험' || s.risk === '중위험')
       const withSub = highMidSpecies.filter((s) => subMap.has(s.name))
-      const totalHighMidQty = highMidSpecies.reduce((s, r) => s + r.qty, 0)
       const totalAllQty = uniqueSpecies.reduce((s, r) => s + r.qty, 0)
-      // 개선율: 대체 후보 있는 수종은 최적 대체율, 없는 수종은 기존 하자율 유지
       const improvedSum = uniqueSpecies.reduce((s, r) => {
         if (r.risk === '고위험' || r.risk === '중위험') {
           const opts = subMap.get(r.name) ?? []
@@ -273,112 +345,104 @@ export function SimulationClient({ sites, substitutions }: Props) {
       const avgOriginal = totalAllQty > 0 ? uniqueSpecies.reduce((s, r) => s + r.rate * r.qty, 0) / totalAllQty : 0
       const avgImproved = totalAllQty > 0 ? improvedSum / totalAllQty : null
       const effectPct = avgImproved != null ? ((avgOriginal - avgImproved) * 100).toFixed(1) : null
-      const effectSummary = highMidSpecies.length === 0
-        ? '고위험·중위험 수종이 없어 대체 검토가 필요하지 않습니다.'
-        : effectPct != null && Number(effectPct) > 0
-          ? `고위험·중위험 ${highMidSpecies.length}종(${totalHighMidQty.toLocaleString()}주) 중 ${withSub.length}종에 대체 수종이 추천됩니다. 최적 대체 적용 시 전체 평균 하자율이 약 ${effectPct}%p 개선될 것으로 예상됩니다.`
-          : `고위험·중위험 ${highMidSpecies.length}종이 확인되었습니다. 대체 수종 등록 후 저감 효과를 분석할 수 있습니다.`
-
-      // 2. 우선 대체 대상 수종 — 수종 중복 제거 후 하자율 높은 순 상위 3종
-      const priorityList = uniqueSpecies
-        .filter((s) => (s.risk === '고위험' || s.risk === '중위험') && s.rate > 0)
-        .sort((a, b) => b.rate - a.rate)
-        .slice(0, 3)
-      const prioritySpecies = priorityList.length === 0
-        ? '우선 대체 대상 수종이 없습니다.'
-        : priorityList.map((s, i) => `${i + 1}. ${s.name}(${(s.rate * 100).toFixed(1)}%)`).join('  ') +
-          ' 순으로 대체 우선순위가 높습니다.'
-
-      // 3. 식재 시기 영향 분석
-      // 우선순위: 계절(수식) 컬럼(planting_season) → 식재시기(planting_date) 자동 계산
-      const rowsWithSeason = siteRows.map((r) => ({
-        ...r,
-        resolvedSeason: resolveSeasonCode(
-          r.planting_season ? SEASON_CODE_TO_KO[r.planting_season] : null,
-          r.planting_date,
-        ),
-      }))
-
-      // 디버그 로그
-      const totalRows = siteRows.length
-      const hasPlantingDate = siteRows.filter((r) => r.planting_date).length
-      const hasSeasonCol = siteRows.filter((r) => r.planting_season).length
-      const autoCalcSeason = rowsWithSeason.filter((r) => r.resolvedSeason && !r.planting_season).length
-      console.log('[AI계절분석] 전체 row:', totalRows)
-      console.log('[AI계절분석] 식재시기 존재:', hasPlantingDate)
-      console.log('[AI계절분석] 계절(수식) 존재:', hasSeasonCol)
-      console.log('[AI계절분석] 자동계산 계절 row:', autoCalcSeason)
-
-      // 계절별 집계 (수량·하자수량 기준, 미상 제외)
-      const seasonBuckets: Record<string, { qty: number; defectQty: number; species: Map<string, { qty: number; defectQty: number }> }> = {}
-      for (const r of rowsWithSeason) {
-        if (!r.resolvedSeason || r.expected_defect_rate == null) continue
-        const s = r.resolvedSeason
-        if (!seasonBuckets[s]) seasonBuckets[s] = { qty: 0, defectQty: 0, species: new Map() }
-        const rowDefectQty = r.expected_defect_qty ?? Math.round(r.quantity_planted * r.expected_defect_rate)
-        seasonBuckets[s].qty += r.quantity_planted
-        seasonBuckets[s].defectQty += rowDefectQty
-        const spName = r.species_name ?? '알 수 없음'
-        const prev = seasonBuckets[s].species.get(spName) ?? { qty: 0, defectQty: 0 }
-        seasonBuckets[s].species.set(spName, { qty: prev.qty + r.quantity_planted, defectQty: prev.defectQty + rowDefectQty })
-      }
-
-      console.log('[AI계절분석] 계절별 집계:', Object.fromEntries(
-        Object.entries(seasonBuckets).map(([k, v]) => [SEASON_CODE_TO_KO[k] ?? k, { qty: v.qty, defectQty: v.defectQty, rate: v.qty > 0 ? (v.defectQty / v.qty * 100).toFixed(1) + '%' : '-' }])
-      ))
-
-      const seasonStats = SEASON_ORDER
-        .filter((k) => seasonBuckets[k])
-        .map((k) => {
-          const v = seasonBuckets[k]
-          const rate = v.qty > 0 ? v.defectQty / v.qty : 0
-          const topSpecies = Array.from(v.species.entries())
-            .map(([name, sv]) => ({ name, rate: sv.qty > 0 ? sv.defectQty / sv.qty : 0 }))
-            .sort((a, b) => b.rate - a.rate)
-            .slice(0, 2)
-            .map((s) => s.name)
-          return { season: k, label: SEASON_CODE_TO_KO[k] ?? k, rate, qty: v.qty, topSpecies }
-        })
-
-      const sortedByRate = [...seasonStats].sort((a, b) => b.rate - a.rate)
-      const overallRate = originalTotalQty > 0
-        ? siteRows.reduce((s, r) => s + (r.expected_defect_rate ?? 0) * r.quantity_planted, 0) / originalTotalQty
-        : 0
-
-      let seasonalImpact: string
-      if (seasonStats.length === 0) {
-        seasonalImpact = '식재일자 또는 계절(수식) 데이터가 없어 식재 시기별 분석을 수행할 수 없습니다. 엑셀 업로드 시 식재시기 컬럼을 입력하면 자동으로 분석됩니다.'
-      } else if (sortedByRate.length === 1) {
-        const s = sortedByRate[0]
-        const diff = ((s.rate - overallRate) * 100).toFixed(1)
-        seasonalImpact = `${s.label} 식재 수목의 하자율(${(s.rate * 100).toFixed(1)}%)이 전체 평균(${(overallRate * 100).toFixed(1)}%) 대비 ${Number(diff) >= 0 ? diff + '%p 높게' : Math.abs(Number(diff)) + '%p 낮게'} 나타났습니다.` +
-          (s.topSpecies.length > 0 ? ` ${s.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '')
+      if (highMidSpecies.length === 0) {
+        effectSummary = '고위험·중위험 수종이 없어 대체 검토가 필요하지 않습니다.'
+      } else if (effectPct != null && Number(effectPct) > 0) {
+        effectSummary = `최적 대체 수종 일괄 적용 시 전체 평균 하자율 약 ${effectPct}%p 개선 가능 (${withSub.length}/${highMidSpecies.length}종 대체 후보 있음)`
       } else {
-        const worst = sortedByRate[0]
-        const best = sortedByRate[sortedByRate.length - 1]
-        const diff = ((worst.rate - overallRate) * 100).toFixed(1)
-        seasonalImpact = `${worst.label} 식재 수목의 하자율이 가장 높으며, 전체 평균 대비 ${diff}%p 높게 나타났습니다.` +
-          (worst.topSpecies.length > 0 ? ` ${worst.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '') +
-          ` ${best.label} 식재(${(best.rate * 100).toFixed(1)}%) 대비 ${((worst.rate - best.rate) * 100).toFixed(1)}%p 차이로, 식재 시기 조정을 검토하십시오.`
+        effectSummary = `고위험·중위험 ${highMidSpecies.length}종이 확인됩니다. 대체 수종 등록 후 절감 효과를 분석할 수 있습니다.`
       }
+    }
 
-      // 4. 관리 포인트 — 수종 중복 제거된 riskCounts 사용
+    // 권장 조치: 미선택 고위험 수종 권고
+    let actionGuide = ''
+    const unselectedHighRisk = uniqueSpecies.filter((s) => {
+      if (s.risk !== '고위험' && s.risk !== '중위험') return false
+      if (selectedSubstitutes[s.name]) return false
+      return true
+    })
+    if (unselectedHighRisk.length === 0 && hasSelection) {
+      actionGuide = '모든 고위험·중위험 수종에 대체 수종이 선택되었습니다. 선택 내용을 검토 후 현장에 적용하세요.'
+    } else if (unselectedHighRisk.length > 0) {
+      const urgent = unselectedHighRisk.filter((s) => s.risk === '고위험').slice(0, 3)
+      const mid = unselectedHighRisk.filter((s) => s.risk === '중위험').slice(0, 2)
+      const parts: string[] = []
+      if (urgent.length > 0) parts.push(`즉시 교체 검토 필요: ${urgent.map((s) => s.name).join(', ')}`)
+      if (mid.length > 0) parts.push(`모니터링 강화: ${mid.map((s) => s.name).join(', ')}`)
+      actionGuide = parts.join(' / ')
+      if (unselectedHighRisk.length > 5) actionGuide += ` 외 ${unselectedHighRisk.length - 5}종`
+    } else {
       const { high: highCount, mid: midCount, low: lowCount } = riskCounts
       const totalSpeciesCount = highCount + midCount + lowCount
-      const highRatio = totalSpeciesCount > 0 ? highCount / totalSpeciesCount : 0
-      let managementPoints = ''
-      if (highRatio >= 0.3) {
-        managementPoints = `전체 수종의 ${(highRatio * 100).toFixed(0)}%가 고위험 등급입니다. 즉시 대체 수종 검토 및 하자 예방 조치가 필요합니다. `
-      } else if (highCount > 0 || midCount > 0) {
-        managementPoints = `고위험 ${highCount}종, 중위험 ${midCount}종에 대한 집중 관리가 필요합니다. `
-      }
-      if (lowCount > 0) {
-        managementPoints += `저위험 ${lowCount}종(전체의 ${(lowCount / totalSpeciesCount * 100).toFixed(0)}%)은 정기 점검 위주로 관리하십시오.`
+      if (highCount === 0 && midCount === 0) {
+        actionGuide = `전 수종 저위험(${lowCount}종) — 정기 점검 위주로 관리하십시오.`
       } else {
-        managementPoints += `저위험 수종 비율을 높이기 위한 수종 교체를 검토하십시오.`
+        actionGuide = `고위험 ${highCount}종·중위험 ${midCount}종에 대한 대체 수종 선택을 권장합니다. 저위험 ${lowCount}종(${totalSpeciesCount > 0 ? (lowCount / totalSpeciesCount * 100).toFixed(0) : 0}%)은 정기 점검으로 유지하십시오.`
       }
+    }
 
-      setAiAnalysis({ effectSummary, prioritySpecies, seasonalImpact, seasonStats, managementPoints })
+    // 식재 시기 영향 분석 (버튼 클릭 시에만 계산)
+    const rowsWithSeason = siteRows.map((r) => ({
+      ...r,
+      resolvedSeason: resolveSeasonCode(
+        r.planting_season ? SEASON_CODE_TO_KO[r.planting_season] : null,
+        r.planting_date,
+      ),
+    }))
+    const seasonBuckets: Record<string, { qty: number; defectQty: number; species: Map<string, { qty: number; defectQty: number }> }> = {}
+    for (const r of rowsWithSeason) {
+      if (!r.resolvedSeason || r.expected_defect_rate == null) continue
+      const s = r.resolvedSeason
+      if (!seasonBuckets[s]) seasonBuckets[s] = { qty: 0, defectQty: 0, species: new Map() }
+      const rowDefectQty = r.expected_defect_qty ?? Math.round(r.quantity_planted * r.expected_defect_rate)
+      seasonBuckets[s].qty += r.quantity_planted
+      seasonBuckets[s].defectQty += rowDefectQty
+      const spName = r.species_name ?? '알 수 없음'
+      const prev = seasonBuckets[s].species.get(spName) ?? { qty: 0, defectQty: 0 }
+      seasonBuckets[s].species.set(spName, { qty: prev.qty + r.quantity_planted, defectQty: prev.defectQty + rowDefectQty })
+    }
+    const seasonStats = SEASON_ORDER
+      .filter((k) => seasonBuckets[k])
+      .map((k) => {
+        const v = seasonBuckets[k]
+        const rate = v.qty > 0 ? v.defectQty / v.qty : 0
+        const topSpecies = Array.from(v.species.entries())
+          .map(([name, sv]) => ({ name, rate: sv.qty > 0 ? sv.defectQty / sv.qty : 0 }))
+          .sort((a, b) => b.rate - a.rate)
+          .slice(0, 2)
+          .map((s) => s.name)
+        return { season: k, label: SEASON_CODE_TO_KO[k] ?? k, rate, qty: v.qty, topSpecies }
+      })
+    const sortedByRate = [...seasonStats].sort((a, b) => b.rate - a.rate)
+    const overallRate = originalTotalQty > 0
+      ? siteRows.reduce((s, r) => s + (r.expected_defect_rate ?? 0) * r.quantity_planted, 0) / originalTotalQty
+      : 0
+    let seasonalImpact: string
+    if (seasonStats.length === 0) {
+      seasonalImpact = '식재일자 또는 계절(수식) 데이터가 없어 식재 시기별 분석을 수행할 수 없습니다.'
+    } else if (sortedByRate.length === 1) {
+      const s = sortedByRate[0]
+      const diff = ((s.rate - overallRate) * 100).toFixed(1)
+      seasonalImpact = `${s.label} 식재 수목의 하자율(${(s.rate * 100).toFixed(1)}%)이 전체 평균(${(overallRate * 100).toFixed(1)}%) 대비 ${Number(diff) >= 0 ? diff + '%p 높게' : Math.abs(Number(diff)) + '%p 낮게'} 나타났습니다.` +
+        (s.topSpecies.length > 0 ? ` ${s.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '')
+    } else {
+      const worst = sortedByRate[0]
+      const best = sortedByRate[sortedByRate.length - 1]
+      const diff = ((worst.rate - overallRate) * 100).toFixed(1)
+      seasonalImpact = `${worst.label} 식재 수목의 하자율이 가장 높으며, 전체 평균 대비 ${diff}%p 높게 나타났습니다.` +
+        (worst.topSpecies.length > 0 ? ` ${worst.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '') +
+        ` ${best.label} 식재(${(best.rate * 100).toFixed(1)}%) 대비 ${((worst.rate - best.rate) * 100).toFixed(1)}%p 차이로, 식재 시기 조정을 검토하십시오.`
+    }
+
+    setAiAnalysis({ riskLevel, recommendReason, effectSummary, actionGuide, seasonalImpact, seasonStats })
+  }
+
+  function generateAiAnalysis() {
+    if (siteRows.length === 0) return
+    setAiGenerating(true)
+    setAiAnalysis(null)
+    setTimeout(() => {
+      computeAiAnalysis()
       setAiGenerating(false)
     }, 800)
   }
@@ -522,7 +586,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
               </table>
             </div>
 
-            {/* KPI 카드 3개 — 동일 크기 */}
+            {/* KPI 카드 6개 — 하자율 3 + 비용 3 */}
             <div className="flex-1 grid grid-cols-3 gap-3">
               <div className="border rounded-lg bg-white px-4 py-3">
                 <div className="text-xs text-gray-500 mb-1">기존 예상 하자율</div>
@@ -541,7 +605,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
                 </div>
               </div>
               <div className="border rounded-lg bg-white px-4 py-3">
-                <div className="text-xs text-gray-500 mb-1">개선 후 하자율 <span className="text-green-600">(대체 적용 시)</span></div>
+                <div className="text-xs text-gray-500 mb-1">개선 후 예상 하자율 <span className="text-green-600">(대체 적용 시)</span></div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="text-2xl font-bold text-gray-900">
                     {improvedWeightedRate != null ? (improvedWeightedRate * 100).toFixed(2) + '%' : '-'}
@@ -555,7 +619,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
                 </div>
               </div>
               <div className="border rounded-lg bg-white px-4 py-3">
-                <div className="text-xs text-gray-500 mb-1">저감 효과</div>
+                <div className="text-xs text-gray-500 mb-1">절감 효과(%)</div>
                 <div className="flex items-center gap-1 flex-wrap">
                   {reductionEffect != null && reductionEffect > 0 ? (
                     <>
@@ -569,6 +633,38 @@ export function SimulationClient({ sites, substitutions }: Props) {
                 <div className="text-xs text-gray-400 mt-1">
                   {reductionEffect != null && reductionEffect > 0
                     ? `예상 하자수량 ${Math.round((originalWeightedRate ?? 0) * originalTotalQty) - Math.round((improvedWeightedRate ?? 0) * originalTotalQty)} 주 감소`
+                    : '대체 수종 선택 시 계산'}
+                </div>
+              </div>
+              <div className="border rounded-lg bg-white px-4 py-3">
+                <div className="text-xs text-gray-500 mb-1">기존 예상 하자 관리비용</div>
+                <div className="text-xl font-bold text-gray-900">
+                  {originalTotalCost > 0 ? '₩' + originalTotalCost.toLocaleString() : '-'}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">단가 × 예상 하자수량 합계</div>
+              </div>
+              <div className="border rounded-lg bg-white px-4 py-3">
+                <div className="text-xs text-gray-500 mb-1">개선 후 예상 하자 관리비용</div>
+                <div className="text-xl font-bold text-gray-900">
+                  {improvedTotalCost != null ? '₩' + improvedTotalCost.toLocaleString() : '-'}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">대체 수종 선택 시 계산</div>
+              </div>
+              <div className="border rounded-lg bg-white px-4 py-3">
+                <div className="text-xs text-gray-500 mb-1">비용 절감액</div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {costReduction != null && costReduction > 0 ? (
+                    <>
+                      <TrendingDown className="h-5 w-5 text-green-500" />
+                      <span className="text-xl font-bold text-green-600">₩{costReduction.toLocaleString()}</span>
+                    </>
+                  ) : (
+                    <span className="text-xl font-bold text-gray-400">-</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  {costReduction != null && costReduction > 0
+                    ? `${((costReduction / originalTotalCost) * 100).toFixed(1)}% 절감`
                     : '대체 수종 선택 시 계산'}
                 </div>
               </div>
@@ -605,67 +701,114 @@ export function SimulationClient({ sites, substitutions }: Props) {
             <Sparkles className={`h-4 w-4 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />
             <span className="text-sm font-semibold text-gray-700">AI 분석 요약</span>
             {!aiAnalysis && !aiGenerating && (
-              <span className="text-xs text-gray-400 ml-1">(AI 분석 생성 버튼 클릭 후 활성화)</span>
+              <span className="text-xs text-gray-400 ml-1">(AI 분석 생성 버튼 클릭 후 활성화 — 대체 수종 선택 시 자동 업데이트)</span>
             )}
             {aiGenerating && (
               <span className="text-xs text-blue-500 ml-1 animate-pulse">분석 생성 중...</span>
             )}
             {aiAnalysis && (
-              <span className="text-xs text-green-600 ml-1">분석 완료</span>
+              <span className="text-xs text-green-600 ml-1">분석 완료 (대체 수종 변경 시 자동 갱신)</span>
             )}
           </div>
           <div className="grid grid-cols-4 divide-x text-xs">
-            {/* 대체 효과 요약 */}
-            {[
-              {
-                title: '대체 효과 요약',
-                icon: <Target className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-blue-500' : 'text-gray-400'}`} />,
-                content: aiAnalysis?.effectSummary,
-                placeholder: '고위험/중위험 수종 대체 시 예상 저감 효과를 분석합니다.',
-              },
-              {
-                title: '우선 대체 대상 수종',
-                icon: <AlertTriangle className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-orange-500' : 'text-gray-400'}`} />,
-                content: aiAnalysis?.prioritySpecies,
-                placeholder: '하자율이 높고 대체 효과가 큰 수종 순으로 우선순위를 제시합니다.',
-              },
-            ].map((box) => (
-              <div key={box.title} className="px-4 py-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  {box.icon}
-                  <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>{box.title}</span>
-                </div>
-                {aiGenerating ? (
-                  <div className="space-y-1.5">
-                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
-                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
-                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/5" />
-                  </div>
-                ) : box.content ? (
-                  <p className="text-gray-700 leading-relaxed">{box.content}</p>
-                ) : (
-                  <p className="text-gray-400 leading-relaxed">{box.placeholder}</p>
-                )}
-              </div>
-            ))}
-
-            {/* 식재 시기 영향 분석 — 바 차트 포함 */}
+            {/* 위험도 */}
             <div className="px-4 py-3">
               <div className="flex items-center gap-1.5 mb-2">
-                <Leaf className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />
-                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>식재 시기 영향 분석</span>
+                <AlertTriangle className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-orange-500' : 'text-gray-400'}`} />
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>위험도</span>
               </div>
               {aiGenerating ? (
                 <div className="space-y-1.5">
                   <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
                   <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
-                  <div className="h-16 bg-gray-100 rounded animate-pulse mt-2" />
                 </div>
               ) : aiAnalysis ? (
-                <div className="space-y-2">
-                  <p className="text-gray-700 leading-relaxed">{aiAnalysis.seasonalImpact}</p>
+                <p className="text-gray-700 leading-relaxed">{aiAnalysis.riskLevel}</p>
+              ) : (
+                <p className="text-gray-400 leading-relaxed">대체 수종 선택 결과를 반영한 현재 위험도를 표시합니다.</p>
+              )}
+            </div>
+
+            {/* 추천 사유 */}
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Target className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-blue-500' : 'text-gray-400'}`} />
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>추천 사유</span>
+              </div>
+              {aiGenerating ? (
+                <div className="space-y-1.5">
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/5" />
+                </div>
+              ) : aiAnalysis ? (
+                <p className="text-gray-700 leading-relaxed">{aiAnalysis.recommendReason}</p>
+              ) : (
+                <p className="text-gray-400 leading-relaxed">선택된 대체 수종의 하자율 개선 근거를 제시합니다.</p>
+              )}
+            </div>
+
+            {/* 예상 절감 효과 */}
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <TrendingDown className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>예상 절감 효과</span>
+              </div>
+              {aiGenerating ? (
+                <div className="space-y-1.5">
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                </div>
+              ) : aiAnalysis ? (
+                <p className="text-gray-700 leading-relaxed">{aiAnalysis.effectSummary}</p>
+              ) : (
+                <p className="text-gray-400 leading-relaxed">현재 선택 기준 실제 절감율 및 절감액을 안내합니다.</p>
+              )}
+            </div>
+
+            {/* 권장 조치 */}
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <TreePine className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-emerald-600' : 'text-gray-400'}`} />
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>권장 조치</span>
+              </div>
+              {aiGenerating ? (
+                <div className="space-y-1.5">
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/5" />
+                </div>
+              ) : aiAnalysis ? (
+                <p className="text-gray-700 leading-relaxed">{aiAnalysis.actionGuide}</p>
+              ) : (
+                <p className="text-gray-400 leading-relaxed">미선택 고위험 수종에 대한 권고 조치를 안내합니다.</p>
+              )}
+            </div>
+          </div>
+
+          {/* 식재 시기 영향 분석 — 하단 확장 영역 */}
+          {(aiAnalysis || aiGenerating) && (
+            <div className="border-t px-4 py-3 text-xs">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Leaf className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>식재 시기 영향 분석</span>
+              </div>
+              {aiGenerating ? (
+                <div className="flex gap-8">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                  </div>
+                  <div className="space-y-1.5 w-48">
+                    <div className="h-3 bg-gray-100 rounded animate-pulse" />
+                    <div className="h-3 bg-gray-100 rounded animate-pulse" />
+                  </div>
+                </div>
+              ) : aiAnalysis ? (
+                <div className="flex gap-8 items-start">
+                  <p className="text-gray-700 leading-relaxed flex-1">{aiAnalysis.seasonalImpact}</p>
                   {aiAnalysis.seasonStats.length > 0 && (
-                    <div className="mt-2 space-y-1.5">
+                    <div className="space-y-1.5 w-52 shrink-0">
                       {(() => {
                         const maxRate = Math.max(...aiAnalysis.seasonStats.map((s) => s.rate), 0.001)
                         const ORDER = ['spring', 'summer', 'fall', 'winter']
@@ -677,9 +820,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
                             <span className="w-6 text-gray-500 shrink-0">{s.label}</span>
                             <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
                               <div
-                                className={`h-3 rounded-full transition-all duration-500 ${
-                                  s.rate === maxRate ? 'bg-red-400' : 'bg-green-400'
-                                }`}
+                                className={`h-3 rounded-full transition-all duration-500 ${s.rate === maxRate ? 'bg-red-400' : 'bg-green-400'}`}
                                 style={{ width: `${Math.round((s.rate / maxRate) * 100)}%` }}
                               />
                             </div>
@@ -692,30 +833,9 @@ export function SimulationClient({ sites, substitutions }: Props) {
                     </div>
                   )}
                 </div>
-              ) : (
-                <p className="text-gray-400 leading-relaxed">식재일자 기반으로 계절별 하자율을 자동 분석합니다.</p>
-              )}
+              ) : null}
             </div>
-
-            {/* 관리 포인트 */}
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <TreePine className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-emerald-600' : 'text-gray-400'}`} />
-                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>관리 포인트</span>
-              </div>
-              {aiGenerating ? (
-                <div className="space-y-1.5">
-                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
-                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
-                  <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/5" />
-                </div>
-              ) : aiAnalysis?.managementPoints ? (
-                <p className="text-gray-700 leading-relaxed">{aiAnalysis.managementPoints}</p>
-              ) : (
-                <p className="text-gray-400 leading-relaxed">수목 관리 및 하자 예방을 위한 핵심 포인트를 안내합니다.</p>
-              )}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* 시뮬레이션 테이블 */}

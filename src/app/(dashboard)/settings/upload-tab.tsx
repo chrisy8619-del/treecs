@@ -37,7 +37,7 @@ const UPLOAD_TYPES: { value: UploadType; label: string; description: string; col
   {
     value: 'defect_analysis',
     label: '하자율 예측 분석',
-    description: '현장별 수목 명세와 단가·예상하자율을 업로드합니다. 예비비가 자동 계산됩니다.',
+    description: '현장별 수목 명세와 단가·예상하자율을 업로드합니다. 예상 하자 관리비용이 자동 계산됩니다.',
     columns: ['날짜', '현장코드', '현장명', '준공일', '식재시기', '협력사', '수종명', '수고 H(m)', '수관폭 W(m)', '흉고직경 B(cm)', '근원직경 R(cm)', '수량', '하자수량', '지역', '단가', '계절(수식)', '규격', '리스크등급', '권장조치', '세부조치', '예상 예비비(₩)'],
   },
   {
@@ -373,7 +373,7 @@ export function UploadTab({ logs: initialLogs }: { logs: UploadLog[] }) {
           <p className="text-blue-700">• 기존 엑셀 템플릿(신규현장_하자율 예측분석 시트)을 그대로 업로드하세요.</p>
           <p className="text-blue-700">• 현장코드는 반드시 시스템에 등록된 코드와 일치해야 합니다.</p>
           <p className="text-blue-700">• 예상하자율은 % 단위(예: 18.52) 또는 소수(예: 0.1852) 둘 다 허용됩니다.</p>
-          <p className="text-blue-700">• 예상 예비비 = 단가 × 예상하자수량은 자동 계산됩니다.</p>
+          <p className="text-blue-700">• 예상 하자 관리비용 = 단가 × 예상하자수량은 자동 계산됩니다.</p>
         </div>
       )}
 

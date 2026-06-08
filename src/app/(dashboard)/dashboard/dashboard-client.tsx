@@ -664,7 +664,7 @@ export function DashboardClient({ sites }: Props) {
                   <Coins className="h-5 w-5 text-yellow-500" />
                 </div>
                 <div>
-                  <div className="text-xs text-gray-500 mb-0.5">총 예비비</div>
+                  <div className="text-xs text-gray-500 mb-0.5">예상 하자 관리비용</div>
                   <div className="text-xl font-bold text-gray-900">{totalReserveStr}</div>
                 </div>
               </div>
@@ -782,7 +782,7 @@ export function DashboardClient({ sites }: Props) {
                     <TableHead className="text-white text-xs font-semibold text-right">단가(자동,₩)</TableHead>
                     <TableHead className="text-white text-xs font-semibold text-right">예상 하자율</TableHead>
                     <TableHead className="text-white text-xs font-semibold text-right">예상 하자수량</TableHead>
-                    <TableHead className="text-white text-xs font-semibold text-right">예상 예비비(₩)</TableHead>
+                    <TableHead className="text-white text-xs font-semibold text-right">예상 하자 관리비용(₩)</TableHead>
                     <TableHead className="text-white text-xs font-semibold text-center">리스크 등급</TableHead>
                     <TableHead className="text-white text-xs font-semibold">권장 조치</TableHead>
                     <TableHead className="text-white text-xs font-semibold">세부 조치</TableHead>
@@ -957,7 +957,7 @@ export function DashboardClient({ sites }: Props) {
               <Coins className="h-5 w-5 text-yellow-500" />
             </div>
             <div>
-              <div className="text-xs text-gray-500">총 예비비</div>
+              <div className="text-xs text-gray-500">예상 하자 관리비용</div>
               <div className="text-xl font-bold text-gray-900">{totalReserveStr}</div>
             </div>
           </div>
