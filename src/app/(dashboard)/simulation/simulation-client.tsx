@@ -277,7 +277,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
         <div>
           <h2 className="text-sm font-semibold text-gray-700 mb-2">현장 기본 정보</h2>
           <div className="flex gap-4">
-            <div className="flex-1 border rounded-lg overflow-visible bg-white">
+            <div className="w-1/2 border rounded-lg overflow-visible bg-white">
               <table className="w-full text-sm">
                 <tbody>
                   <tr className="border-b">
@@ -336,11 +336,11 @@ export function SimulationClient({ sites, substitutions }: Props) {
               </table>
             </div>
 
-            {/* KPI 카드 3개 */}
-            <div className="flex gap-3">
-              <div className="border rounded-lg bg-white px-4 py-3 min-w-[160px]">
+            {/* KPI 카드 3개 — 동일 크기 */}
+            <div className="flex-1 grid grid-cols-3 gap-3">
+              <div className="border rounded-lg bg-white px-4 py-3">
                 <div className="text-xs text-gray-500 mb-1">기존 예상 하자율</div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="text-2xl font-bold text-gray-900">
                     {originalWeightedRate != null ? (originalWeightedRate * 100).toFixed(2) + '%' : '-'}
                   </div>
@@ -354,9 +354,9 @@ export function SimulationClient({ sites, substitutions }: Props) {
                   예상 하자수량 {siteRows.reduce((s, r) => s + (r.expected_defect_qty ?? 0), 0)} 주
                 </div>
               </div>
-              <div className="border rounded-lg bg-white px-4 py-3 min-w-[175px]">
+              <div className="border rounded-lg bg-white px-4 py-3">
                 <div className="text-xs text-gray-500 mb-1">개선 후 하자율 <span className="text-green-600">(대체 적용 시)</span></div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="text-2xl font-bold text-gray-900">
                     {improvedWeightedRate != null ? (improvedWeightedRate * 100).toFixed(2) + '%' : '-'}
                   </div>
@@ -368,9 +368,9 @@ export function SimulationClient({ sites, substitutions }: Props) {
                   예상 하자수량 {tableRows.reduce((s, r) => s + (r.improvedDefectQty ?? r.expected_defect_qty ?? 0), 0)} 주
                 </div>
               </div>
-              <div className="border rounded-lg bg-white px-4 py-3 min-w-[140px]">
+              <div className="border rounded-lg bg-white px-4 py-3">
                 <div className="text-xs text-gray-500 mb-1">저감 효과</div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap">
                   {reductionEffect != null && reductionEffect > 0 ? (
                     <>
                       <TrendingDown className="h-5 w-5 text-green-500" />
@@ -391,35 +391,24 @@ export function SimulationClient({ sites, substitutions }: Props) {
         </div>
 
         {/* 전체 리스크 요약 */}
-        <div className="border rounded-lg bg-white px-4 py-3 flex items-center gap-4 flex-wrap">
-          <span className="text-xs font-semibold text-gray-600 shrink-0">전체 리스크 요약</span>
-          <div className="flex items-center gap-2">
-            <div className="border border-red-200 rounded-lg px-4 py-2 text-center min-w-[90px]">
+        <div className="border rounded-lg bg-white px-4 py-3">
+          <div className="text-xs font-semibold text-gray-600 mb-2">전체 리스크 요약</div>
+          <div className="grid grid-cols-4 gap-3">
+            <div className="border border-red-200 rounded-lg px-4 py-2 text-center">
               <div className="text-xs text-red-500 font-medium">고위험 수종</div>
               <div className="text-xl font-bold text-red-600">{riskCounts.high} <span className="text-sm font-normal">종</span></div>
             </div>
-            <div className="border border-orange-200 rounded-lg px-4 py-2 text-center min-w-[90px]">
+            <div className="border border-orange-200 rounded-lg px-4 py-2 text-center">
               <div className="text-xs text-orange-500 font-medium">중위험 수종</div>
               <div className="text-xl font-bold text-orange-500">{riskCounts.mid} <span className="text-sm font-normal">종</span></div>
             </div>
-            <div className="border border-green-200 rounded-lg px-4 py-2 text-center min-w-[90px]">
+            <div className="border border-green-200 rounded-lg px-4 py-2 text-center">
               <div className="text-xs text-green-600 font-medium">저위험 수종</div>
               <div className="text-xl font-bold text-green-600">{riskCounts.low} <span className="text-sm font-normal">종</span></div>
             </div>
-            <div className="border border-blue-200 rounded-lg px-4 py-2 text-center min-w-[110px]">
+            <div className="border border-blue-200 rounded-lg px-4 py-2 text-center">
               <div className="text-xs text-blue-600 font-medium">대체 추천 가능 수종</div>
               <div className="text-xl font-bold text-blue-600">{substituteAvailableCount} <span className="text-sm font-normal">종</span></div>
-            </div>
-          </div>
-          <div className="ml-auto flex items-start gap-2 max-w-xs">
-            <Leaf className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
-            <div>
-              <div className="text-xs font-medium text-gray-700">대체 적용 시 기대 효과</div>
-              <div className="text-xs text-gray-500 mt-0.5">
-                {substituteAvailableCount > 0
-                  ? '고위험/중위험 수종에 추천 대체 수종을 모두 적용할 경우, 평균 하자율 저감 효과를 기대할 수 있습니다.'
-                  : '대체수종 데이터를 등록하면 시뮬레이션이 가능합니다.'}
-              </div>
             </div>
           </div>
         </div>
