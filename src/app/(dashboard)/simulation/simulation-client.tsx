@@ -201,6 +201,97 @@ export function SimulationClient({ sites, substitutions }: Props) {
     return [...new Set(names)]
   }, [siteRows])
 
+  // AI 분석 상태
+  const [aiAnalysis, setAiAnalysis] = useState<{
+    effectSummary: string
+    prioritySpecies: string
+    seasonalImpact: string
+    managementPoints: string
+  } | null>(null)
+  const [aiGenerating, setAiGenerating] = useState(false)
+
+  function generateAiAnalysis() {
+    if (siteRows.length === 0) return
+    setAiGenerating(true)
+    setAiAnalysis(null)
+
+    setTimeout(() => {
+      // 1. 대체 효과 요약
+      const highMidRows = siteRows.filter((r) => r.risk_level === '고위험' || r.risk_level === '중위험')
+      const withSub = highMidRows.filter((r) => r.species_name && subMap.has(r.species_name))
+      const totalHighMidQty = highMidRows.reduce((s, r) => s + r.quantity_planted, 0)
+      const avgHighMidRate = highMidRows.length > 0
+        ? highMidRows.reduce((s, r) => s + (r.expected_defect_rate ?? 0) * r.quantity_planted, 0) / (totalHighMidQty || 1)
+        : 0
+      const subCandidates = withSub.map((r) => {
+        const opts = subMap.get(r.species_name!) ?? []
+        const best = opts.reduce((a, b) => a.rate < b.rate ? a : b, opts[0])
+        return { ...r, bestRate: best?.rate ?? null }
+      }).filter((r) => r.bestRate != null)
+      const avgImproved = subCandidates.length > 0
+        ? subCandidates.reduce((s, r) => s + r.bestRate! * r.quantity_planted, 0) / subCandidates.reduce((s, r) => s + r.quantity_planted, 0)
+        : null
+      const effectPct = avgImproved != null ? ((avgHighMidRate - avgImproved) * 100).toFixed(1) : null
+      const effectSummary = highMidRows.length === 0
+        ? '고위험·중위험 수종이 없어 대체 검토가 필요하지 않습니다.'
+        : effectPct != null
+          ? `고위험·중위험 ${highMidRows.length}종(${totalHighMidQty.toLocaleString()}주) 중 ${withSub.length}종에 대체 수종이 추천됩니다. 최적 대체 적용 시 평균 하자율이 약 ${effectPct}%p 개선될 것으로 예상됩니다.`
+          : `고위험·중위험 ${highMidRows.length}종이 확인되었습니다. 대체 수종 등록 후 저감 효과를 분석할 수 있습니다.`
+
+      // 2. 우선 대체 대상 수종
+      const priorityList = [...siteRows]
+        .filter((r) => (r.risk_level === '고위험' || r.risk_level === '중위험') && r.expected_defect_rate != null && r.species_name)
+        .sort((a, b) => (b.expected_defect_rate ?? 0) - (a.expected_defect_rate ?? 0))
+        .slice(0, 3)
+      const prioritySpecies = priorityList.length === 0
+        ? '우선 대체 대상 수종이 없습니다.'
+        : priorityList.map((r, i) => `${i + 1}. ${r.species_name}(${((r.expected_defect_rate ?? 0) * 100).toFixed(1)}%)`).join('  ') +
+          ' 순으로 대체 우선순위가 높습니다.'
+
+      // 3. 계절 영향
+      const seasonMap: Record<string, { qty: number; defect: number }> = {}
+      for (const r of siteRows) {
+        // PlantingRow에 planting_season이 없으므로 any 캐스팅
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const season: string = (r as any).planting_season ?? '미상'
+        if (!seasonMap[season]) seasonMap[season] = { qty: 0, defect: 0 }
+        seasonMap[season].qty += r.quantity_planted
+        seasonMap[season].defect += (r.expected_defect_rate ?? 0) * r.quantity_planted
+      }
+      const seasonLabel: Record<string, string> = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울', 미상: '미상' }
+      const seasonStats = Object.entries(seasonMap)
+        .map(([k, v]) => ({ season: seasonLabel[k] ?? k, rate: v.qty > 0 ? v.defect / v.qty : 0, qty: v.qty }))
+        .filter((s) => s.qty > 0)
+        .sort((a, b) => b.rate - a.rate)
+      const seasonalImpact = seasonStats.length <= 1
+        ? `전체 ${siteRows.length}종의 식재 계절 데이터 기반으로 분석합니다. 계절 데이터가 충분하지 않습니다.`
+        : `${seasonStats[0].season} 식재 수종의 평균 하자율(${(seasonStats[0].rate * 100).toFixed(1)}%)이 가장 높습니다. ` +
+          `${seasonStats[seasonStats.length - 1].season} 식재(${(seasonStats[seasonStats.length - 1].rate * 100).toFixed(1)}%) 대비 ` +
+          `${((seasonStats[0].rate - seasonStats[seasonStats.length - 1].rate) * 100).toFixed(1)}%p 차이가 있어 식재 시기 조정을 검토하십시오.`
+
+      // 4. 관리 포인트
+      const highCount = riskCounts.high
+      const midCount = riskCounts.mid
+      const lowCount = riskCounts.low
+      const totalCount = siteRows.length
+      const highRatio = totalCount > 0 ? highCount / totalCount : 0
+      let managementPoints = ''
+      if (highRatio >= 0.3) {
+        managementPoints = `전체 수종의 ${(highRatio * 100).toFixed(0)}%가 고위험 등급입니다. 즉시 대체 수종 검토 및 하자 예방 조치가 필요합니다. `
+      } else if (highCount > 0 || midCount > 0) {
+        managementPoints = `고위험 ${highCount}종, 중위험 ${midCount}종에 대한 집중 관리가 필요합니다. `
+      }
+      if (lowCount > 0) {
+        managementPoints += `저위험 ${lowCount}종(전체의 ${(lowCount / totalCount * 100).toFixed(0)}%)은 정기 점검 위주로 관리하십시오.`
+      } else {
+        managementPoints += `저위험 수종 비율을 높이기 위한 수종 교체를 검토하십시오.`
+      }
+
+      setAiAnalysis({ effectSummary, prioritySpecies, seasonalImpact, managementPoints })
+      setAiGenerating(false)
+    }, 800)
+  }
+
   async function handleSubFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -248,8 +339,12 @@ export function SimulationClient({ sites, substitutions }: Props) {
           <h1 className="text-xl font-bold tracking-tight">현장 하자율 예측 및 대체 수종 시뮬레이션</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button disabled className="flex items-center gap-1.5 bg-white/10 text-white/50 text-xs px-3 py-1.5 rounded border border-white/20 cursor-not-allowed">
-            <Sparkles className="h-3.5 w-3.5" />AI 분석 생성
+          <button
+            onClick={generateAiAnalysis}
+            disabled={aiGenerating || siteRows.length === 0}
+            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <Sparkles className={`h-3.5 w-3.5 ${aiGenerating ? 'animate-spin' : ''}`} />
+            {aiGenerating ? '분석 중...' : 'AI 분석 생성'}
           </button>
           <button onClick={handleExportTemplate} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors">
             <Upload className="h-3.5 w-3.5" />파일 내보내기
@@ -413,26 +508,64 @@ export function SimulationClient({ sites, substitutions }: Props) {
           </div>
         </div>
 
-        {/* AI 분석 요약 (UI 틀) */}
+        {/* AI 분석 요약 */}
         <div className="border rounded-lg bg-white overflow-hidden">
           <div className="px-4 py-2.5 bg-gray-50 border-b flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-gray-400" />
+            <Sparkles className={`h-4 w-4 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />
             <span className="text-sm font-semibold text-gray-700">AI 분석 요약</span>
-            <span className="text-xs text-gray-400 ml-1">(AI 분석 생성 버튼 클릭 후 활성화)</span>
+            {!aiAnalysis && !aiGenerating && (
+              <span className="text-xs text-gray-400 ml-1">(AI 분석 생성 버튼 클릭 후 활성화)</span>
+            )}
+            {aiGenerating && (
+              <span className="text-xs text-blue-500 ml-1 animate-pulse">분석 생성 중...</span>
+            )}
+            {aiAnalysis && (
+              <span className="text-xs text-green-600 ml-1">분석 완료</span>
+            )}
           </div>
           <div className="grid grid-cols-4 divide-x text-xs">
             {[
-              { title: '대체 효과 요약', icon: <Target className="h-3.5 w-3.5 text-gray-400" />, placeholder: '고위험/중위험 수종 대체 시 예상 저감 효과를 분석합니다.' },
-              { title: '우선 대체 대상 수종', icon: <AlertTriangle className="h-3.5 w-3.5 text-gray-400" />, placeholder: '하자율이 높고 대체 효과가 큰 수종 순으로 우선순위를 제시합니다.' },
-              { title: '계절 영향', icon: <Leaf className="h-3.5 w-3.5 text-gray-400" />, placeholder: '식재 계절에 따른 하자율 영향 분석 결과를 표시합니다.' },
-              { title: '관리 포인트', icon: <TreePine className="h-3.5 w-3.5 text-gray-400" />, placeholder: '수목 관리 및 하자 예방을 위한 핵심 포인트를 안내합니다.' },
+              {
+                title: '대체 효과 요약',
+                icon: <Target className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-blue-500' : 'text-gray-400'}`} />,
+                content: aiAnalysis?.effectSummary,
+                placeholder: '고위험/중위험 수종 대체 시 예상 저감 효과를 분석합니다.',
+              },
+              {
+                title: '우선 대체 대상 수종',
+                icon: <AlertTriangle className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-orange-500' : 'text-gray-400'}`} />,
+                content: aiAnalysis?.prioritySpecies,
+                placeholder: '하자율이 높고 대체 효과가 큰 수종 순으로 우선순위를 제시합니다.',
+              },
+              {
+                title: '계절 영향',
+                icon: <Leaf className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />,
+                content: aiAnalysis?.seasonalImpact,
+                placeholder: '식재 계절에 따른 하자율 영향 분석 결과를 표시합니다.',
+              },
+              {
+                title: '관리 포인트',
+                icon: <TreePine className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-emerald-600' : 'text-gray-400'}`} />,
+                content: aiAnalysis?.managementPoints,
+                placeholder: '수목 관리 및 하자 예방을 위한 핵심 포인트를 안내합니다.',
+              },
             ].map((box) => (
-              <div key={box.title} className="px-4 py-3">
+              <div key={box.title} className={`px-4 py-3 transition-colors ${aiAnalysis ? 'bg-white' : ''}`}>
                 <div className="flex items-center gap-1.5 mb-2">
                   {box.icon}
-                  <span className="font-semibold text-gray-600">{box.title}</span>
+                  <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>{box.title}</span>
                 </div>
-                <p className="text-gray-400 leading-relaxed">{box.placeholder}</p>
+                {aiGenerating ? (
+                  <div className="space-y-1.5">
+                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-full" />
+                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-4/5" />
+                    <div className="h-2.5 bg-gray-200 rounded animate-pulse w-3/5" />
+                  </div>
+                ) : box.content ? (
+                  <p className="text-gray-700 leading-relaxed">{box.content}</p>
+                ) : (
+                  <p className="text-gray-400 leading-relaxed">{box.placeholder}</p>
+                )}
               </div>
             ))}
           </div>
