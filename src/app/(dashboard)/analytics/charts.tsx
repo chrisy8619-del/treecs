@@ -92,7 +92,7 @@ function ReserveCostTooltip({ active, payload, label }: {
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-md">
       <p className="font-medium mb-1">{label}</p>
-      <p className="text-muted-foreground">예상 예비비: <span className="font-semibold text-foreground">₩{cost.toLocaleString()}</span></p>
+      <p className="text-muted-foreground">예상 하자 관리비용: <span className="font-semibold text-foreground">₩{cost.toLocaleString()}</span></p>
       {data && <p style={{ color: riskColor(data.defect_rate) }}>하자율: {(data.defect_rate * 100).toFixed(1)}% ({data.risk_level})</p>}
     </div>
   )
@@ -196,7 +196,7 @@ export function SpeciesDefectChart({ data }: { data: SpeciesData[] }) {
 export function SiteReserveCostChart({ data }: { data: SiteReserveData[] }) {
   const chartData = data.slice(0, 10).map((d) => ({
     name: d.name.length > 8 ? d.name.slice(0, 8) + '…' : d.name,
-    예상예비비: d.reserve_cost,
+    예상하자관리비용: d.reserve_cost,
     defect_rate: d.defect_rate,
     risk_level: d.risk_level,
   }))
@@ -211,7 +211,7 @@ export function SiteReserveCostChart({ data }: { data: SiteReserveData[] }) {
           tick={{ fontSize: 11 }}
         />
         <Tooltip content={<ReserveCostTooltip />} />
-        <Bar dataKey="예상예비비" radius={[4, 4, 0, 0]}>
+        <Bar dataKey="예상하자관리비용" radius={[4, 4, 0, 0]}>
           {chartData.map((entry, i) => (
             <Cell key={i} fill={riskColor(entry.defect_rate)} />
           ))}

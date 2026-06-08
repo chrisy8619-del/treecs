@@ -404,7 +404,7 @@ export default async function AnalyticsPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">총 예상 예비비</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">예상 하자 관리비용</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold text-orange-500">
@@ -509,7 +509,7 @@ export default async function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  현장별 예상 예비비
+                  현장별 예상 하자 관리비용
                   <span className="ml-2 text-sm font-normal text-muted-foreground">상위 10개 현장</span>
                 </CardTitle>
               </CardHeader>

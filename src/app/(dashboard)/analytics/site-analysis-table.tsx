@@ -74,7 +74,7 @@ export function SiteAnalysisTable({ siteData, siteReserveData }: Props) {
               <TableHead className="text-right">점검 수량</TableHead>
               <TableHead className="text-right">하자 수량</TableHead>
               <TableHead className="text-right">하자율</TableHead>
-              <TableHead className="text-right">예상 예비비</TableHead>
+              <TableHead className="text-right">예상 하자 관리비용</TableHead>
               <TableHead>리스크 등급</TableHead>
             </TableRow>
           </TableHeader>
