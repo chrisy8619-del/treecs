@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   YearlyDefectChart,
@@ -295,9 +296,14 @@ export default async function AnalyticsPage() {
     <div className="space-y-0 -m-6">
       {/* ── 상단 헤더 ── */}
       <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">분석</h1>
-          <p className="text-xs text-green-200 mt-0.5">현장별 하자율 통계 및 리스크 분석 현황입니다.</p>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+            <Image src="/logo.png" alt="TreeCS" width={32} height={32} className="object-contain" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">분석</h1>
+            <p className="text-xs text-green-200 mt-0.5">현장별 하자율 통계 및 리스크 분석 현황입니다.</p>
+          </div>
         </div>
       </div>
 

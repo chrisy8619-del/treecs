@@ -29,6 +29,7 @@ import {
 import { logout } from '@/app/actions/auth'
 
 const navMain = [
+  { title: '대시보드', href: '/simulation', icon: LayoutDashboard },
   { title: '분석', href: '/analytics', icon: BarChart3 },
   { title: '현장 하자율 예측 분석', href: '/dashboard', icon: LayoutDashboard },
 ]
