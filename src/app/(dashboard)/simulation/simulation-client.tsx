@@ -26,6 +26,7 @@ export type PlantingRow = {
   expected_defect_qty: number | null
   expected_reserve_cost: number | null
   risk_level: string | null
+  planting_season: string | null
   contractor_name: string | null
   notes: string | null
 }
@@ -251,9 +252,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
       // 3. 계절 영향
       const seasonMap: Record<string, { qty: number; defect: number }> = {}
       for (const r of siteRows) {
-        // PlantingRow에 planting_season이 없으므로 any 캐스팅
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const season: string = (r as any).planting_season ?? '미상'
+        const season: string = r.planting_season ?? '미상'
         if (!seasonMap[season]) seasonMap[season] = { qty: 0, defect: 0 }
         seasonMap[season].qty += r.quantity_planted
         seasonMap[season].defect += (r.expected_defect_rate ?? 0) * r.quantity_planted
