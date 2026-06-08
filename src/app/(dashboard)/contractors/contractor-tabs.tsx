@@ -27,7 +27,7 @@ type TabId = 'stats' | 'list'
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'stats', label: '협력사 현황', icon: <BarChart2 className="h-4 w-4" /> },
-  { id: 'list', label: '시공사 관리', icon: <List className="h-4 w-4" /> },
+  { id: 'list', label: '협력사 목록', icon: <List className="h-4 w-4" /> },
 ]
 
 export function ContractorTabs({ contractors, stats, isSuperadmin, year }: Props) {
