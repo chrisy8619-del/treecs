@@ -8,10 +8,13 @@ import {
   ContractorDefectChart,
   SpeciesDefectChart,
   SiteReserveCostChart,
+  SpeciesSeasonHeatmap,
   type SiteReserveData,
+  type HeatmapData,
 } from './charts'
 import { SiteAnalysisTable } from './site-analysis-table'
 import { SpeciesAnalysisTable } from './species-analysis-table'
+import { resolveSeasonCode, safeNumZero, calcRiskLevel, SEASON_ORDER, SEASON_CODE_TO_KO } from '@/lib/season-utils'
 
 function riskLabel(rate: number) {
   if (rate >= 0.20) return '🔴 고위험'
@@ -48,6 +51,7 @@ async function getAnalyticsData() {
         site_id,
         quantity_planted,
         planting_date,
+        planting_season,
         unit_price,
         expected_defect_rate,
         expected_defect_qty,
@@ -56,7 +60,6 @@ async function getAnalyticsData() {
         species ( species_name_ko ),
         contractors ( contractor_name )
       `)
-      .not('expected_defect_rate', 'is', null)
       .limit(10000),
   ])
 
@@ -92,45 +95,94 @@ async function getAnalyticsData() {
       }))
   }
 
-  // 계절별 — 점검 회차 season_code 우선, 없으면 식재기록 planting_date로 보완
-  const seasonMap = new Map<string, { inspected: number; defect: number }>()
+  // 계절별 — 점검 회차 season_code 우선, 없으면 식재기록 기반
+  const seasonMap = new Map<string, { qty: number; defectQty: number }>()
   for (const item of items) {
     const round = Array.isArray(item.inspection_rounds) ? item.inspection_rounds[0] : item.inspection_rounds
     const season = round?.season_code
     if (!season) continue
-    const prev = seasonMap.get(season) ?? { inspected: 0, defect: 0 }
+    const prev = seasonMap.get(season) ?? { qty: 0, defectQty: 0 }
     seasonMap.set(season, {
-      inspected: prev.inspected + (item.quantity_inspected ?? 0),
-      defect: prev.defect + (item.defect_quantity ?? 0),
+      qty: prev.qty + (item.quantity_inspected ?? 0),
+      defectQty: prev.defectQty + (item.defect_quantity ?? 0),
     })
   }
 
-  // 점검 데이터에 계절 없으면 식재기록 기반으로 집계
+  // 식재기록 기반 계절 집계
+  // 우선순위: planting_season(계절(수식)) → planting_date(식재시기) 자동 계산
   if (seasonMap.size === 0 && plantings.length > 0) {
+    let countTotal = 0, countDate = 0, countSeasonCol = 0, countAuto = 0
     for (const p of plantings) {
-      if (!p.planting_date || !p.expected_defect_rate) continue
-      const month = new Date(p.planting_date).getMonth() + 1
-      let season = 'winter'
-      if (month >= 3 && month <= 5) season = 'spring'
-      else if (month >= 6 && month <= 8) season = 'summer'
-      else if (month >= 9 && month <= 11) season = 'fall'
-      const qty = p.quantity_planted ?? 0
-      const defectQty = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
-      const prev = seasonMap.get(season) ?? { inspected: 0, defect: 0 }
-      seasonMap.set(season, {
-        inspected: prev.inspected + qty,
-        defect: prev.defect + defectQty,
-      })
+      countTotal++
+      const seasonKo = (p as unknown as Record<string, string | null>)['planting_season']
+        ? SEASON_CODE_TO_KO[(p as unknown as Record<string, string>)['planting_season']]
+        : null
+      if ((p as unknown as Record<string, string | null>)['planting_season']) countSeasonCol++
+      if (p.planting_date) countDate++
+      const season = resolveSeasonCode(seasonKo, p.planting_date)
+      if (season && !(p as unknown as Record<string, string | null>)['planting_season']) countAuto++
+      if (!season) continue
+      const qty = safeNumZero(p.quantity_planted)
+      const rate = p.expected_defect_rate ?? 0
+      const defectQty = safeNumZero(p.expected_defect_qty) || Math.round(qty * rate)
+      const prev = seasonMap.get(season) ?? { qty: 0, defectQty: 0 }
+      seasonMap.set(season, { qty: prev.qty + qty, defectQty: prev.defectQty + defectQty })
     }
+    console.log('[분석/계절] 전체row:', countTotal, '식재시기:', countDate, '계절(수식):', countSeasonCol, '자동계산:', countAuto)
+    console.log('[분석/계절] 계절별집계:', Object.fromEntries(
+      [...seasonMap.entries()].map(([k, v]) => [SEASON_CODE_TO_KO[k] ?? k, { qty: v.qty, defectQty: v.defectQty, rate: v.qty > 0 ? (v.defectQty / v.qty * 100).toFixed(1) + '%' : '-' }])
+    ))
   }
 
-  const seasonOrder = ['spring', 'summer', 'fall', 'winter']
-  const seasonData = seasonOrder
+  const seasonData = SEASON_ORDER
     .filter((s) => seasonMap.has(s))
     .map((s) => {
-      const { inspected, defect } = seasonMap.get(s)!
-      return { label: s, defect_rate: inspected > 0 ? defect / inspected : 0 }
+      const { qty, defectQty } = seasonMap.get(s)!
+      return { label: s, defect_rate: qty > 0 ? defectQty / qty : 0 }
     })
+
+  // 수종별 계절 히트맵 데이터
+  // 행: 수종명 / 열: 봄·여름·가을·겨울 / 값: 해당 수종+계절 하자율
+  type SpSeasonBucket = { qty: number; defectQty: number }
+  const heatmapBuckets = new Map<string, Record<string, SpSeasonBucket>>()
+  for (const p of plantings) {
+    const sp = Array.isArray(p.species) ? p.species[0] : p.species
+    const spName = (sp as { species_name_ko?: string } | null)?.species_name_ko ?? '알 수 없음'
+    const seasonKo = (p as unknown as Record<string, string | null>)['planting_season']
+      ? SEASON_CODE_TO_KO[(p as unknown as Record<string, string>)['planting_season']]
+      : null
+    const season = resolveSeasonCode(seasonKo, p.planting_date)
+    if (!season) continue
+    const qty = safeNumZero(p.quantity_planted)
+    const rate = p.expected_defect_rate != null ? p.expected_defect_rate
+      : null
+    if (rate === null) continue
+    const defectQty = safeNumZero(p.expected_defect_qty) || Math.round(qty * rate)
+    if (!heatmapBuckets.has(spName)) heatmapBuckets.set(spName, {})
+    const spBuckets = heatmapBuckets.get(spName)!
+    if (!spBuckets[season]) spBuckets[season] = { qty: 0, defectQty: 0 }
+    spBuckets[season].qty += qty
+    spBuckets[season].defectQty += defectQty
+  }
+
+  // 히트맵: 하자율 있는 수종 중 최대 20종 (전체 평균 하자율 높은 순)
+  const heatmapData: HeatmapData[] = [...heatmapBuckets.entries()]
+    .map(([name, seasons]) => {
+      const totalQty = Object.values(seasons).reduce((s, v) => s + v.qty, 0)
+      const totalDefect = Object.values(seasons).reduce((s, v) => s + v.defectQty, 0)
+      const avgRate = totalQty > 0 ? totalDefect / totalQty : 0
+      const seasonRates: Record<string, number | null> = {}
+      for (const k of SEASON_ORDER) {
+        const b = seasons[k]
+        seasonRates[k] = b && b.qty > 0 ? b.defectQty / b.qty : null
+      }
+      return { name, avgRate, ...seasonRates } as HeatmapData
+    })
+    .filter((d) => d.avgRate > 0)
+    .sort((a, b) => b.avgRate - a.avgRate)
+    .slice(0, 20)
+
+  console.log('[분석/히트맵] 수종 수:', heatmapData.length)
 
   // 협력사별 — 집계 테이블 우선, 없으면 inspection_items, 그것도 없으면 planting_records 기반
   let contractorData: { name: string; defect_rate: number; total_quantity: number }[] = []
@@ -259,12 +311,13 @@ async function getAnalyticsData() {
   // 예비비 합계
   const totalReserveCost = siteReserveData.reduce((s, v) => s + v.reserve_cost, 0)
 
-  // 리스크 카운트 (식재기록 기반)
+  // 리스크 카운트 — risk_level 없으면 expected_defect_rate 기준 자동 보정
   const riskCounts = plantings.reduce(
     (acc, p) => {
-      if (p.risk_level === '고위험') acc.high++
-      else if (p.risk_level === '중위험') acc.mid++
-      else if (p.risk_level === '저위험') acc.low++
+      const level = p.risk_level ?? (p.expected_defect_rate != null ? calcRiskLevel(p.expected_defect_rate) : null)
+      if (level === '고위험') acc.high++
+      else if (level === '중위험') acc.mid++
+      else if (level === '저위험') acc.low++
       return acc
     },
     { high: 0, mid: 0, low: 0 }
@@ -272,7 +325,7 @@ async function getAnalyticsData() {
 
   return {
     yearlyData, seasonData, contractorData, siteData, speciesData,
-    siteReserveData, totalReserveCost, riskCounts,
+    siteReserveData, totalReserveCost, riskCounts, heatmapData,
     totalInspected, totalDefect, overallRate, highRiskSites,
     hasPlantingAnalysis: plantings.length > 0,
   }
@@ -285,7 +338,7 @@ export default async function AnalyticsPage() {
 
   const {
     yearlyData, seasonData, contractorData, siteData, speciesData,
-    siteReserveData, totalReserveCost, riskCounts,
+    siteReserveData, totalReserveCost, riskCounts, heatmapData,
     totalInspected, totalDefect, overallRate, highRiskSites,
     hasPlantingAnalysis,
   } = await getAnalyticsData()
@@ -506,6 +559,23 @@ export default async function AnalyticsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* 수종별 계절 히트맵 */}
+          {heatmapData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  수종별 계절 하자율 히트맵
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    식재시기 기준 · 상위 {heatmapData.length}종
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SpeciesSeasonHeatmap data={heatmapData} />
+              </CardContent>
+            </Card>
+          )}
 
           {/* 현장별 분석 테이블 — 전체 현장 20개씩 페이지네이션 */}
           {(siteData.length > 0 || siteReserveData.length > 0) && (

@@ -46,6 +46,15 @@ export type SiteReserveData = {
   risk_level: string
 }
 
+export type HeatmapData = {
+  name: string
+  avgRate: number
+  spring: number | null
+  summer: number | null
+  fall: number | null
+  winter: number | null
+}
+
 import { SEASON_CODE_TO_KO } from '@/lib/season-utils'
 
 const seasonLabel: Record<string, string> = SEASON_CODE_TO_KO
@@ -209,5 +218,86 @@ export function SiteReserveCostChart({ data }: { data: SiteReserveData[] }) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+  )
+}
+
+const SEASON_COLS = [
+  { key: 'spring', label: '봄' },
+  { key: 'summer', label: '여름' },
+  { key: 'fall', label: '가을' },
+  { key: 'winter', label: '겨울' },
+] as const
+
+function heatmapCellColor(rate: number | null): string {
+  if (rate === null) return '#f3f4f6'
+  if (rate >= 0.30) return '#991b1b'
+  if (rate >= 0.20) return '#ef4444'
+  if (rate >= 0.10) return '#f97316'
+  if (rate >= 0.05) return '#facc15'
+  return '#86efac'
+}
+
+function heatmapTextColor(rate: number | null): string {
+  if (rate === null) return '#9ca3af'
+  if (rate >= 0.10) return '#ffffff'
+  return '#374151'
+}
+
+export function SpeciesSeasonHeatmap({ data }: { data: HeatmapData[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr>
+            <th className="text-left px-3 py-2 bg-gray-50 border border-gray-200 font-medium text-gray-600 w-32">수종명</th>
+            {SEASON_COLS.map((s) => (
+              <th key={s.key} className="px-3 py-2 bg-gray-50 border border-gray-200 font-medium text-gray-600 text-center w-24">{s.label}</th>
+            ))}
+            <th className="px-3 py-2 bg-gray-50 border border-gray-200 font-medium text-gray-600 text-center w-24">평균</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr key={row.name}>
+              <td className="px-3 py-1.5 border border-gray-200 font-medium text-gray-800 bg-gray-50 whitespace-nowrap">{row.name}</td>
+              {SEASON_COLS.map((s) => {
+                const rate = row[s.key]
+                return (
+                  <td
+                    key={s.key}
+                    className="px-3 py-1.5 border border-gray-200 text-center font-medium"
+                    style={{ backgroundColor: heatmapCellColor(rate), color: heatmapTextColor(rate) }}
+                  >
+                    {rate !== null ? `${(rate * 100).toFixed(1)}%` : '-'}
+                  </td>
+                )
+              })}
+              <td
+                className="px-3 py-1.5 border border-gray-200 text-center font-semibold"
+                style={{ backgroundColor: heatmapCellColor(row.avgRate), color: heatmapTextColor(row.avgRate) }}
+              >
+                {(row.avgRate * 100).toFixed(1)}%
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500">
+        <span className="font-medium">범례:</span>
+        {[
+          { color: '#86efac', text: '5% 미만' },
+          { color: '#facc15', text: '5~10%' },
+          { color: '#f97316', text: '10~20%' },
+          { color: '#ef4444', text: '20~30%' },
+          { color: '#991b1b', text: '30% 이상' },
+          { color: '#f3f4f6', text: '데이터 없음' },
+        ].map((item) => (
+          <span key={item.text} className="flex items-center gap-1">
+            <span className="inline-block w-4 h-4 rounded border border-gray-200" style={{ backgroundColor: item.color }} />
+            {item.text}
+          </span>
+        ))}
+      </div>
+    </div>
   )
 }

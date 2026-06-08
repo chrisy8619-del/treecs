@@ -8,6 +8,7 @@ import {
   TrendingDown, TreePine, Leaf, AlertTriangle, Target,
 } from 'lucide-react'
 import { uploadSubstitutions } from '@/app/actions/substitution'
+import { resolveSeasonCode, SEASON_CODE_TO_KO, SEASON_ORDER } from '@/lib/season-utils'
 
 export type SiteOption = {
   id: string
@@ -289,74 +290,74 @@ export function SimulationClient({ sites, substitutions }: Props) {
           ' 순으로 대체 우선순위가 높습니다.'
 
       // 3. 식재 시기 영향 분석
-      // 식재일자(planting_date) 우선 → 없으면 planting_season 폴백
-      function getSeasonFromDate(dateStr: string | null): string | null {
-        if (!dateStr) return null
-        const month = new Date(dateStr).getMonth() + 1
-        if (month >= 3 && month <= 5) return 'spring'
-        if (month >= 6 && month <= 8) return 'summer'
-        if (month >= 9 && month <= 11) return 'fall'
-        return 'winter'
-      }
-      const seasonLabel: Record<string, string> = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울' }
-
-      // 행 단위로 계절 결정 (planting_date → planting_season 순)
+      // 우선순위: 계절(수식) 컬럼(planting_season) → 식재시기(planting_date) 자동 계산
       const rowsWithSeason = siteRows.map((r) => ({
         ...r,
-        resolvedSeason: getSeasonFromDate(r.planting_date) ?? r.planting_season ?? null,
+        resolvedSeason: resolveSeasonCode(
+          r.planting_season ? SEASON_CODE_TO_KO[r.planting_season] : null,
+          r.planting_date,
+        ),
       }))
 
-      // 계절별 집계 (수량 가중, 미상 제외)
-      const seasonBuckets: Record<string, { qty: number; defectSum: number; species: Map<string, { qty: number; defectSum: number }> }> = {}
-      let seasonKnownQty = 0
+      // 디버그 로그
+      const totalRows = siteRows.length
+      const hasPlantingDate = siteRows.filter((r) => r.planting_date).length
+      const hasSeasonCol = siteRows.filter((r) => r.planting_season).length
+      const autoCalcSeason = rowsWithSeason.filter((r) => r.resolvedSeason && !r.planting_season).length
+      console.log('[AI계절분석] 전체 row:', totalRows)
+      console.log('[AI계절분석] 식재시기 존재:', hasPlantingDate)
+      console.log('[AI계절분석] 계절(수식) 존재:', hasSeasonCol)
+      console.log('[AI계절분석] 자동계산 계절 row:', autoCalcSeason)
+
+      // 계절별 집계 (수량·하자수량 기준, 미상 제외)
+      const seasonBuckets: Record<string, { qty: number; defectQty: number; species: Map<string, { qty: number; defectQty: number }> }> = {}
       for (const r of rowsWithSeason) {
         if (!r.resolvedSeason || r.expected_defect_rate == null) continue
         const s = r.resolvedSeason
-        if (!seasonBuckets[s]) seasonBuckets[s] = { qty: 0, defectSum: 0, species: new Map() }
+        if (!seasonBuckets[s]) seasonBuckets[s] = { qty: 0, defectQty: 0, species: new Map() }
+        const rowDefectQty = r.expected_defect_qty ?? Math.round(r.quantity_planted * r.expected_defect_rate)
         seasonBuckets[s].qty += r.quantity_planted
-        seasonBuckets[s].defectSum += r.expected_defect_rate * r.quantity_planted
-        seasonKnownQty += r.quantity_planted
-        // 수종별 집계 (하이리스크 수종 파악용)
+        seasonBuckets[s].defectQty += rowDefectQty
         const spName = r.species_name ?? '알 수 없음'
-        const prev = seasonBuckets[s].species.get(spName) ?? { qty: 0, defectSum: 0 }
-        seasonBuckets[s].species.set(spName, {
-          qty: prev.qty + r.quantity_planted,
-          defectSum: prev.defectSum + r.expected_defect_rate * r.quantity_planted,
-        })
+        const prev = seasonBuckets[s].species.get(spName) ?? { qty: 0, defectQty: 0 }
+        seasonBuckets[s].species.set(spName, { qty: prev.qty + r.quantity_planted, defectQty: prev.defectQty + rowDefectQty })
       }
 
-      const seasonStats = Object.entries(seasonBuckets)
-        .map(([k, v]) => ({
-          season: k,
-          label: seasonLabel[k] ?? k,
-          rate: v.qty > 0 ? v.defectSum / v.qty : 0,
-          qty: v.qty,
-          // 해당 계절에서 하자율 높은 수종 상위 2개
-          topSpecies: Array.from(v.species.entries())
-            .map(([name, sv]) => ({ name, rate: sv.qty > 0 ? sv.defectSum / sv.qty : 0 }))
+      console.log('[AI계절분석] 계절별 집계:', Object.fromEntries(
+        Object.entries(seasonBuckets).map(([k, v]) => [SEASON_CODE_TO_KO[k] ?? k, { qty: v.qty, defectQty: v.defectQty, rate: v.qty > 0 ? (v.defectQty / v.qty * 100).toFixed(1) + '%' : '-' }])
+      ))
+
+      const seasonStats = SEASON_ORDER
+        .filter((k) => seasonBuckets[k])
+        .map((k) => {
+          const v = seasonBuckets[k]
+          const rate = v.qty > 0 ? v.defectQty / v.qty : 0
+          const topSpecies = Array.from(v.species.entries())
+            .map(([name, sv]) => ({ name, rate: sv.qty > 0 ? sv.defectQty / sv.qty : 0 }))
             .sort((a, b) => b.rate - a.rate)
             .slice(0, 2)
-            .map((s) => s.name),
-        }))
-        .sort((a, b) => b.rate - a.rate)
+            .map((s) => s.name)
+          return { season: k, label: SEASON_CODE_TO_KO[k] ?? k, rate, qty: v.qty, topSpecies }
+        })
 
+      const sortedByRate = [...seasonStats].sort((a, b) => b.rate - a.rate)
       const overallRate = originalTotalQty > 0
         ? siteRows.reduce((s, r) => s + (r.expected_defect_rate ?? 0) * r.quantity_planted, 0) / originalTotalQty
         : 0
 
       let seasonalImpact: string
       if (seasonStats.length === 0) {
-        seasonalImpact = '식재일자 데이터가 없어 식재 시기별 분석을 수행할 수 없습니다. 엑셀 업로드 시 식재시기 컬럼을 입력하면 자동으로 분석됩니다.'
-      } else if (seasonStats.length === 1) {
-        const s = seasonStats[0]
+        seasonalImpact = '식재일자 또는 계절(수식) 데이터가 없어 식재 시기별 분석을 수행할 수 없습니다. 엑셀 업로드 시 식재시기 컬럼을 입력하면 자동으로 분석됩니다.'
+      } else if (sortedByRate.length === 1) {
+        const s = sortedByRate[0]
         const diff = ((s.rate - overallRate) * 100).toFixed(1)
-        seasonalImpact = `${s.label} 식재 수목의 하자율(${(s.rate * 100).toFixed(1)}%)이 전체 평균(${(overallRate * 100).toFixed(1)}%) 대비 ${diff}% ${Number(diff) >= 0 ? '높게' : '낮게'} 나타났습니다.` +
-          (s.topSpecies.length > 0 ? ` ${s.topSpecies.join(', ')}에서 집중적으로 발생했습니다.` : '')
+        seasonalImpact = `${s.label} 식재 수목의 하자율(${(s.rate * 100).toFixed(1)}%)이 전체 평균(${(overallRate * 100).toFixed(1)}%) 대비 ${Number(diff) >= 0 ? diff + '%p 높게' : Math.abs(Number(diff)) + '%p 낮게'} 나타났습니다.` +
+          (s.topSpecies.length > 0 ? ` ${s.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '')
       } else {
-        const worst = seasonStats[0]
-        const best = seasonStats[seasonStats.length - 1]
+        const worst = sortedByRate[0]
+        const best = sortedByRate[sortedByRate.length - 1]
         const diff = ((worst.rate - overallRate) * 100).toFixed(1)
-        seasonalImpact = `${worst.label} 식재 수목의 하자율이 가장 높으며, 전체 평균 대비 ${diff}% 높게 나타났습니다.` +
+        seasonalImpact = `${worst.label} 식재 수목의 하자율이 가장 높으며, 전체 평균 대비 ${diff}%p 높게 나타났습니다.` +
           (worst.topSpecies.length > 0 ? ` ${worst.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '') +
           ` ${best.label} 식재(${(best.rate * 100).toFixed(1)}%) 대비 ${((worst.rate - best.rate) * 100).toFixed(1)}%p 차이로, 식재 시기 조정을 검토하십시오.`
       }
