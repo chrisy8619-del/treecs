@@ -643,7 +643,23 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
 
         {/* 전체 리스크 요약 */}
         <div className="border rounded-lg bg-white px-4 py-3">
-          <div className="text-xs font-semibold text-gray-600 mb-2">전체 리스크 요약</div>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-600">전체 리스크 요약</span>
+            <div className="flex items-center gap-1.5 ml-1">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                고위험 ≥ 20%
+              </span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
+                중위험 10~19%
+              </span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                저위험 &lt; 10%
+              </span>
+            </div>
+          </div>
           <div className="grid grid-cols-4 gap-3">
             <div className="border border-red-200 rounded-lg px-4 py-2 text-center">
               <div className="text-xs text-red-500 font-medium">고위험 수종</div>
