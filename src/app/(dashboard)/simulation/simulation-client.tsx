@@ -170,11 +170,13 @@ export function SimulationClient({ sites, substitutions }: Props) {
   }, [siteRows])
 
   const improvedWeightedRate = useMemo(() => {
+    // 분모를 기존과 동일하게 expected_defect_rate가 있는 전체 수량으로 통일
     const rows = tableRows.filter((r) => r.expected_defect_rate != null)
     const totalQty = rows.reduce((s, r) => s + r.quantity_planted, 0)
     if (totalQty === 0) return null
     return rows.reduce((s, r) => {
-      const rate = r.improvedRate ?? r.expected_defect_rate ?? 0
+      // 대체 수종이 선택된 행만 개선율 적용, 나머지는 기존 하자율 유지
+      const rate = r.improvedRate != null ? r.improvedRate : r.expected_defect_rate!
       return s + rate * r.quantity_planted
     }, 0) / totalQty
   }, [tableRows])
@@ -182,20 +184,29 @@ export function SimulationClient({ sites, substitutions }: Props) {
   const reductionEffect = originalWeightedRate != null && improvedWeightedRate != null
     ? originalWeightedRate - improvedWeightedRate : null
 
+  // 수종명 기준 중복 제거 후 리스크 집계
   const riskCounts = useMemo(() => {
-    let high = 0, mid = 0, low = 0
+    const seen = new Map<string, string>()
     for (const r of siteRows) {
-      if (r.risk_level === '고위험') high++
-      else if (r.risk_level === '중위험') mid++
-      else if (r.risk_level === '저위험') low++
+      const key = r.species_name ?? `__no_name_${r.id}`
+      if (!seen.has(key) && r.risk_level) seen.set(key, r.risk_level)
+    }
+    let high = 0, mid = 0, low = 0
+    for (const level of seen.values()) {
+      if (level === '고위험') high++
+      else if (level === '중위험') mid++
+      else if (level === '저위험') low++
     }
     return { high, mid, low }
   }, [siteRows])
 
-  const substituteAvailableCount = useMemo(
-    () => siteRows.filter((r) => r.species_name && subMap.has(r.species_name)).length,
-    [siteRows, subMap]
-  )
+  // 수종명 기준 중복 제거 후 대체 추천 가능 수종 수 집계
+  const substituteAvailableCount = useMemo(() => {
+    const uniqueSpecies = new Set(
+      siteRows.map((r) => r.species_name).filter((n): n is string => !!n)
+    )
+    return [...uniqueSpecies].filter((name) => subMap.has(name)).length
+  }, [siteRows, subMap])
 
   const contractorNames = useMemo(() => {
     const names = siteRows.map((r) => r.contractor_name).filter((n): n is string => !!n)
@@ -217,63 +228,89 @@ export function SimulationClient({ sites, substitutions }: Props) {
     setAiAnalysis(null)
 
     setTimeout(() => {
-      // 1. 대체 효과 요약
-      const highMidRows = siteRows.filter((r) => r.risk_level === '고위험' || r.risk_level === '중위험')
-      const withSub = highMidRows.filter((r) => r.species_name && subMap.has(r.species_name))
-      const totalHighMidQty = highMidRows.reduce((s, r) => s + r.quantity_planted, 0)
-      const avgHighMidRate = highMidRows.length > 0
-        ? highMidRows.reduce((s, r) => s + (r.expected_defect_rate ?? 0) * r.quantity_planted, 0) / (totalHighMidQty || 1)
-        : 0
-      const subCandidates = withSub.map((r) => {
-        const opts = subMap.get(r.species_name!) ?? []
-        const best = opts.reduce((a, b) => a.rate < b.rate ? a : b, opts[0])
-        return { ...r, bestRate: best?.rate ?? null }
-      }).filter((r) => r.bestRate != null)
-      const avgImproved = subCandidates.length > 0
-        ? subCandidates.reduce((s, r) => s + r.bestRate! * r.quantity_planted, 0) / subCandidates.reduce((s, r) => s + r.quantity_planted, 0)
-        : null
-      const effectPct = avgImproved != null ? ((avgHighMidRate - avgImproved) * 100).toFixed(1) : null
-      const effectSummary = highMidRows.length === 0
-        ? '고위험·중위험 수종이 없어 대체 검토가 필요하지 않습니다.'
-        : effectPct != null
-          ? `고위험·중위험 ${highMidRows.length}종(${totalHighMidQty.toLocaleString()}주) 중 ${withSub.length}종에 대체 수종이 추천됩니다. 최적 대체 적용 시 평균 하자율이 약 ${effectPct}%p 개선될 것으로 예상됩니다.`
-          : `고위험·중위험 ${highMidRows.length}종이 확인되었습니다. 대체 수종 등록 후 저감 효과를 분석할 수 있습니다.`
+      // 수종명 기준 중복 제거 (동일 수종 여러 행 → 수량 합산, 하자율은 수량 가중 평균)
+      const speciesAgg = new Map<string, { qty: number; defectSum: number; risk: string | null; season: string | null }>()
+      for (const r of siteRows) {
+        const key = r.species_name ?? `__no_name_${r.id}`
+        const prev = speciesAgg.get(key) ?? { qty: 0, defectSum: 0, risk: r.risk_level, season: r.planting_season }
+        speciesAgg.set(key, {
+          qty: prev.qty + r.quantity_planted,
+          defectSum: prev.defectSum + (r.expected_defect_rate ?? 0) * r.quantity_planted,
+          risk: prev.risk ?? r.risk_level,
+          season: prev.season ?? r.planting_season,
+        })
+      }
+      const uniqueSpecies = Array.from(speciesAgg.entries()).map(([name, v]) => ({
+        name,
+        qty: v.qty,
+        rate: v.qty > 0 ? v.defectSum / v.qty : 0,
+        risk: v.risk,
+        season: v.season,
+      }))
 
-      // 2. 우선 대체 대상 수종
-      const priorityList = [...siteRows]
-        .filter((r) => (r.risk_level === '고위험' || r.risk_level === '중위험') && r.expected_defect_rate != null && r.species_name)
-        .sort((a, b) => (b.expected_defect_rate ?? 0) - (a.expected_defect_rate ?? 0))
+      // 1. 대체 효과 요약 — 전체 수량 기준 분모 통일
+      const highMidSpecies = uniqueSpecies.filter((s) => s.risk === '고위험' || s.risk === '중위험')
+      const withSub = highMidSpecies.filter((s) => subMap.has(s.name))
+      const totalHighMidQty = highMidSpecies.reduce((s, r) => s + r.qty, 0)
+      const totalAllQty = uniqueSpecies.reduce((s, r) => s + r.qty, 0)
+      // 개선율: 대체 후보 있는 수종은 최적 대체율, 없는 수종은 기존 하자율 유지
+      const improvedSum = uniqueSpecies.reduce((s, r) => {
+        if (r.risk === '고위험' || r.risk === '중위험') {
+          const opts = subMap.get(r.name) ?? []
+          if (opts.length > 0) {
+            const best = opts.reduce((a, b) => a.rate < b.rate ? a : b)
+            return s + best.rate * r.qty
+          }
+        }
+        return s + r.rate * r.qty
+      }, 0)
+      const avgOriginal = totalAllQty > 0 ? uniqueSpecies.reduce((s, r) => s + r.rate * r.qty, 0) / totalAllQty : 0
+      const avgImproved = totalAllQty > 0 ? improvedSum / totalAllQty : null
+      const effectPct = avgImproved != null ? ((avgOriginal - avgImproved) * 100).toFixed(1) : null
+      const effectSummary = highMidSpecies.length === 0
+        ? '고위험·중위험 수종이 없어 대체 검토가 필요하지 않습니다.'
+        : effectPct != null && Number(effectPct) > 0
+          ? `고위험·중위험 ${highMidSpecies.length}종(${totalHighMidQty.toLocaleString()}주) 중 ${withSub.length}종에 대체 수종이 추천됩니다. 최적 대체 적용 시 전체 평균 하자율이 약 ${effectPct}%p 개선될 것으로 예상됩니다.`
+          : `고위험·중위험 ${highMidSpecies.length}종이 확인되었습니다. 대체 수종 등록 후 저감 효과를 분석할 수 있습니다.`
+
+      // 2. 우선 대체 대상 수종 — 수종 중복 제거 후 하자율 높은 순 상위 3종
+      const priorityList = uniqueSpecies
+        .filter((s) => (s.risk === '고위험' || s.risk === '중위험') && s.rate > 0)
+        .sort((a, b) => b.rate - a.rate)
         .slice(0, 3)
       const prioritySpecies = priorityList.length === 0
         ? '우선 대체 대상 수종이 없습니다.'
-        : priorityList.map((r, i) => `${i + 1}. ${r.species_name}(${((r.expected_defect_rate ?? 0) * 100).toFixed(1)}%)`).join('  ') +
+        : priorityList.map((s, i) => `${i + 1}. ${s.name}(${(s.rate * 100).toFixed(1)}%)`).join('  ') +
           ' 순으로 대체 우선순위가 높습니다.'
 
-      // 3. 계절 영향
-      const seasonMap: Record<string, { qty: number; defect: number }> = {}
-      for (const r of siteRows) {
-        const season: string = r.planting_season ?? '미상'
-        if (!seasonMap[season]) seasonMap[season] = { qty: 0, defect: 0 }
-        seasonMap[season].qty += r.quantity_planted
-        seasonMap[season].defect += (r.expected_defect_rate ?? 0) * r.quantity_planted
+      // 3. 계절 영향 — 수종 기준 집계 (미상 제외하고 실제 계절 데이터만 비교)
+      const seasonMap: Record<string, { qty: number; defectSum: number }> = {}
+      for (const s of uniqueSpecies) {
+        const season = s.season ?? '미상'
+        if (!seasonMap[season]) seasonMap[season] = { qty: 0, defectSum: 0 }
+        seasonMap[season].qty += s.qty
+        seasonMap[season].defectSum += s.rate * s.qty
       }
-      const seasonLabel: Record<string, string> = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울', 미상: '미상' }
+      const seasonLabel: Record<string, string> = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울' }
       const seasonStats = Object.entries(seasonMap)
-        .map(([k, v]) => ({ season: seasonLabel[k] ?? k, rate: v.qty > 0 ? v.defect / v.qty : 0, qty: v.qty }))
+        .filter(([k]) => k !== '미상')
+        .map(([k, v]) => ({ season: seasonLabel[k] ?? k, rate: v.qty > 0 ? v.defectSum / v.qty : 0, qty: v.qty }))
         .filter((s) => s.qty > 0)
         .sort((a, b) => b.rate - a.rate)
-      const seasonalImpact = seasonStats.length <= 1
-        ? `전체 ${siteRows.length}종의 식재 계절 데이터 기반으로 분석합니다. 계절 데이터가 충분하지 않습니다.`
+      const unknownQty = seasonMap['미상']?.qty ?? 0
+      const knownRatio = originalTotalQty > 0 ? ((originalTotalQty - unknownQty) / originalTotalQty * 100).toFixed(0) : '0'
+      const seasonalImpact = seasonStats.length < 2
+        ? unknownQty > 0
+          ? `전체 수량 중 ${knownRatio}%에만 식재 계절 데이터가 있어 계절별 비교가 어렵습니다. 엑셀 '계절(수식)' 컬럼을 확인하십시오.`
+          : '식재 계절 데이터가 없습니다. 엑셀 업로드 시 계절(수식) 컬럼을 입력하면 분석할 수 있습니다.'
         : `${seasonStats[0].season} 식재 수종의 평균 하자율(${(seasonStats[0].rate * 100).toFixed(1)}%)이 가장 높습니다. ` +
           `${seasonStats[seasonStats.length - 1].season} 식재(${(seasonStats[seasonStats.length - 1].rate * 100).toFixed(1)}%) 대비 ` +
           `${((seasonStats[0].rate - seasonStats[seasonStats.length - 1].rate) * 100).toFixed(1)}%p 차이가 있어 식재 시기 조정을 검토하십시오.`
 
-      // 4. 관리 포인트
-      const highCount = riskCounts.high
-      const midCount = riskCounts.mid
-      const lowCount = riskCounts.low
-      const totalCount = siteRows.length
-      const highRatio = totalCount > 0 ? highCount / totalCount : 0
+      // 4. 관리 포인트 — 수종 중복 제거된 riskCounts 사용
+      const { high: highCount, mid: midCount, low: lowCount } = riskCounts
+      const totalSpeciesCount = highCount + midCount + lowCount
+      const highRatio = totalSpeciesCount > 0 ? highCount / totalSpeciesCount : 0
       let managementPoints = ''
       if (highRatio >= 0.3) {
         managementPoints = `전체 수종의 ${(highRatio * 100).toFixed(0)}%가 고위험 등급입니다. 즉시 대체 수종 검토 및 하자 예방 조치가 필요합니다. `
@@ -281,7 +318,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
         managementPoints = `고위험 ${highCount}종, 중위험 ${midCount}종에 대한 집중 관리가 필요합니다. `
       }
       if (lowCount > 0) {
-        managementPoints += `저위험 ${lowCount}종(전체의 ${(lowCount / totalCount * 100).toFixed(0)}%)은 정기 점검 위주로 관리하십시오.`
+        managementPoints += `저위험 ${lowCount}종(전체의 ${(lowCount / totalSpeciesCount * 100).toFixed(0)}%)은 정기 점검 위주로 관리하십시오.`
       } else {
         managementPoints += `저위험 수종 비율을 높이기 위한 수종 교체를 검토하십시오.`
       }
