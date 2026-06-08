@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import * as XLSX from 'xlsx'
 import {
@@ -120,7 +120,17 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
     return map
   }, [substitutions])
 
-  // 현장 내 저위험 수종을 고위험/중위험 수종의 대체 후보로 자동 추천
+  // 수목하자율 기준 리스크 등급 헬퍼 (speciesAvgRate 값 → '고위험'|'중위험'|'저위험'|null)
+  const getSpeciesRisk = useCallback((name: string | null): string | null => {
+    if (!name) return null
+    const rate = speciesAvgRate[name]
+    if (rate == null) return null
+    if (rate >= 0.20) return '고위험'
+    if (rate >= 0.10) return '중위험'
+    return '저위험'
+  }, [speciesAvgRate])
+
+  // 현장 내 저위험 수종을 고위험/중위험 수종의 대체 후보로 자동 추천 (수목하자율 기준)
   const subMap = useMemo(() => {
     const map = new Map<string, { name: string; rate: number; isAuto?: boolean }[]>()
 
@@ -130,19 +140,23 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
       map.set(k, sorted.map((s) => ({ ...s, isAuto: false })))
     }
 
-    // 현장 내 저위험 수종 목록 (하자율 0 초과인 수종만, 중복 제거)
+    // 현장 내 저위험 수종 목록: 수목하자율 기준 저위험인 수종 (중복 제거, 낮은 순)
     const lowRiskSpecies = Array.from(
       new Map(
         siteRows
-          .filter((r) => r.species_name && r.risk_level === '저위험' && r.expected_defect_rate != null)
-          .map((r) => [r.species_name!, { name: r.species_name!, rate: r.expected_defect_rate! }])
+          .filter((r) => r.species_name && getSpeciesRisk(r.species_name) === '저위험')
+          .map((r) => {
+            const rate = speciesAvgRate[r.species_name!] ?? 0
+            return [r.species_name!, { name: r.species_name!, rate }]
+          })
       ).values()
-    ).sort((a, b) => a.rate - b.rate)  // 하자율 낮은 순
+    ).sort((a, b) => a.rate - b.rate)
 
-    // 고위험/중위험 수종에 DB 등록 없으면 자동 추천 상위 3개 추가
+    // 고위험/중위험 수종(수목하자율 기준)에 DB 등록 없으면 자동 추천 상위 3개 추가
     for (const r of siteRows) {
       if (!r.species_name) continue
-      if (r.risk_level !== '고위험' && r.risk_level !== '중위험') continue
+      const risk = getSpeciesRisk(r.species_name)
+      if (risk !== '고위험' && risk !== '중위험') continue
       if (map.has(r.species_name) && map.get(r.species_name)!.length > 0) continue
       const candidates = lowRiskSpecies.filter((s) => s.name !== r.species_name).slice(0, 3)
       if (candidates.length > 0) {
@@ -151,7 +165,7 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
     }
 
     return map
-  }, [dbSubMap, siteRows])
+  }, [dbSubMap, siteRows, getSpeciesRisk, speciesAvgRate])
 
   const tableRows = useMemo(() => {
     return siteRows.map((r) => {
@@ -159,7 +173,8 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
       const substituteName = selectedSubstitutes[speciesName] ?? null
       const substituteOptions = subMap.get(speciesName) ?? []
       const selectedSub = substituteOptions.find((s) => s.name === substituteName)
-      const originalRate = r.expected_defect_rate
+      // 수목하자율(전체 DB 기준)을 기준 하자율로 사용
+      const originalRate = speciesAvgRate[speciesName] != null ? speciesAvgRate[speciesName] : r.expected_defect_rate
       const improvedRate = selectedSub?.rate ?? null
       const reduction = originalRate != null && improvedRate != null ? originalRate - improvedRate : null
       const improvedDefectQty = improvedRate != null ? Math.round(r.quantity_planted * improvedRate) : null
@@ -169,28 +184,39 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
         : null
       return { ...r, speciesName, substituteOptions, selectedSubstituteName: substituteName, improvedRate, reduction, improvedDefectQty, improvedReserveCost }
     })
-  }, [siteRows, selectedSubstitutes, subMap])
+  }, [siteRows, selectedSubstitutes, subMap, speciesAvgRate])
 
   const originalTotalQty = siteRows.reduce((s, r) => s + r.quantity_planted, 0)
 
   const originalWeightedRate = useMemo(() => {
-    const withRate = siteRows.filter((r) => r.expected_defect_rate != null)
+    // 수목하자율 기준 가중평균: speciesAvgRate 없는 행은 expected_defect_rate 폴백
+    const withRate = siteRows.filter((r) => {
+      const name = r.species_name ?? ''
+      return speciesAvgRate[name] != null || r.expected_defect_rate != null
+    })
     const totalQty = withRate.reduce((s, r) => s + r.quantity_planted, 0)
     if (totalQty === 0) return null
-    return withRate.reduce((s, r) => s + r.expected_defect_rate! * r.quantity_planted, 0) / totalQty
-  }, [siteRows])
+    return withRate.reduce((s, r) => {
+      const name = r.species_name ?? ''
+      const rate = speciesAvgRate[name] != null ? speciesAvgRate[name] : r.expected_defect_rate!
+      return s + rate * r.quantity_planted
+    }, 0) / totalQty
+  }, [siteRows, speciesAvgRate])
 
   const improvedWeightedRate = useMemo(() => {
-    // 분모를 기존과 동일하게 expected_defect_rate가 있는 전체 수량으로 통일
-    const rows = tableRows.filter((r) => r.expected_defect_rate != null)
+    // 수목하자율 기준: 대체 수종 선택 행은 improvedRate, 나머지는 수목하자율
+    const rows = tableRows.filter((r) => {
+      const rate = speciesAvgRate[r.speciesName] ?? r.expected_defect_rate
+      return rate != null
+    })
     const totalQty = rows.reduce((s, r) => s + r.quantity_planted, 0)
     if (totalQty === 0) return null
     return rows.reduce((s, r) => {
-      // 대체 수종이 선택된 행만 개선율 적용, 나머지는 기존 하자율 유지
-      const rate = r.improvedRate != null ? r.improvedRate : r.expected_defect_rate!
+      const baseRate = speciesAvgRate[r.speciesName] != null ? speciesAvgRate[r.speciesName] : r.expected_defect_rate!
+      const rate = r.improvedRate != null ? r.improvedRate : baseRate
       return s + rate * r.quantity_planted
     }, 0) / totalQty
-  }, [tableRows])
+  }, [tableRows, speciesAvgRate])
 
   const reductionEffect = originalWeightedRate != null && improvedWeightedRate != null
     ? originalWeightedRate - improvedWeightedRate : null
@@ -209,12 +235,15 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
   const costReduction = originalTotalCost > 0 && improvedTotalCost != null
     ? originalTotalCost - improvedTotalCost : null
 
-  // 수종명 기준 중복 제거 후 리스크 집계
+  // 수종명 기준 중복 제거 후 리스크 집계 (수목하자율 기준)
   const riskCounts = useMemo(() => {
     const seen = new Map<string, string>()
     for (const r of siteRows) {
       const key = r.species_name ?? `__no_name_${r.id}`
-      if (!seen.has(key) && r.risk_level) seen.set(key, r.risk_level)
+      if (!seen.has(key)) {
+        const risk = getSpeciesRisk(r.species_name)
+        seen.set(key, risk ?? r.risk_level ?? '')
+      }
     }
     let high = 0, mid = 0, low = 0
     for (const level of seen.values()) {
@@ -259,25 +288,27 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
   function computeAiAnalysis() {
     if (siteRows.length === 0) return
 
-    // 수종명 기준 중복 제거 (동일 수종 여러 행 → 수량 합산, 하자율 수량 가중 평균)
-    const speciesAgg = new Map<string, { qty: number; defectSum: number; risk: string | null; season: string | null }>()
+    // 수종명 기준 중복 제거 (수량 합산, 하자율은 수목하자율 기준)
+    const speciesAgg = new Map<string, { qty: number; season: string | null }>()
     for (const r of siteRows) {
       const key = r.species_name ?? `__no_name_${r.id}`
-      const prev = speciesAgg.get(key) ?? { qty: 0, defectSum: 0, risk: r.risk_level, season: r.planting_season }
+      const prev = speciesAgg.get(key) ?? { qty: 0, season: r.planting_season }
       speciesAgg.set(key, {
         qty: prev.qty + r.quantity_planted,
-        defectSum: prev.defectSum + (r.expected_defect_rate ?? 0) * r.quantity_planted,
-        risk: prev.risk ?? r.risk_level,
         season: prev.season ?? r.planting_season,
       })
     }
-    const uniqueSpecies = Array.from(speciesAgg.entries()).map(([name, v]) => ({
-      name,
-      qty: v.qty,
-      rate: v.qty > 0 ? v.defectSum / v.qty : 0,
-      risk: v.risk,
-      season: v.season,
-    }))
+    const uniqueSpecies = Array.from(speciesAgg.entries()).map(([name, v]) => {
+      const avgRate = speciesAvgRate[name]
+      const risk = getSpeciesRisk(name)
+      return {
+        name,
+        qty: v.qty,
+        rate: avgRate != null ? avgRate : 0,
+        risk,
+        season: v.season,
+      }
+    })
 
     // 현재 선택된 대체 수종 반영 후 하자율 계산
     const selectedEntries = Object.entries(selectedSubstitutes).filter(([, v]) => !!v)
