@@ -126,7 +126,7 @@ export function SimulationClient({ sites, substitutions }: Props) {
     const lowRiskSpecies = Array.from(
       new Map(
         siteRows
-          .filter((r) => r.species_name && r.risk_level === '저위험' && (r.expected_defect_rate ?? 0) > 0)
+          .filter((r) => r.species_name && r.risk_level === '저위험' && r.expected_defect_rate != null)
           .map((r) => [r.species_name!, { name: r.species_name!, rate: r.expected_defect_rate! }])
       ).values()
     ).sort((a, b) => a.rate - b.rate)  // 하자율 낮은 순
