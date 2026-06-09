@@ -15,6 +15,7 @@ import {
 import { SiteAnalysisTable } from './site-analysis-table'
 import { SpeciesAnalysisTable } from './species-analysis-table'
 import { resolveSeasonCode, safeNumZero, SEASON_ORDER, SEASON_CODE_TO_KO } from '@/lib/season-utils'
+import { Leaf, TrendingDown, AlertTriangle, Calculator } from 'lucide-react'
 
 function riskLabel(rate: number) {
   if (rate >= 0.20) return '🔴 고위험'
@@ -159,7 +160,7 @@ async function getAnalyticsData() {
         const b = seasons[k]
         seasonRates[k] = b && b.qty > 0 ? b.defectQty / b.qty : null
       }
-      return { name, avgRate, ...seasonRates } as HeatmapData
+      return { name, avgRate, inspected: totalQty, ...seasonRates } as HeatmapData
     })
     .filter((d) => d.avgRate > 0)
     .sort((a, b) => b.avgRate - a.avgRate)
@@ -317,185 +318,175 @@ export default async function AnalyticsPage() {
 
   const hasData = siteData.length > 0 || yearlyData.length > 0 || hasPlantingAnalysis
 
+  // 리스크 chip 집계
+  const riskHigh = speciesData.filter((s) => s.defect_rate >= 0.20).length
+  const riskMid  = speciesData.filter((s) => s.defect_rate >= 0.10 && s.defect_rate < 0.20).length
+  const riskLow  = speciesData.filter((s) => s.defect_rate < 0.10).length
+
   return (
-    <div className="space-y-0 -m-6">
+    <div className="space-y-0 -m-6 bg-[#F8FAF9] min-h-screen">
       {/* ── 상단 헤더 ── */}
-      <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
-            <Image src="/logo.png" alt="TreeCS" width={32} height={32} className="object-contain" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">분석</h1>
-            <p className="text-xs text-green-200 mt-0.5">현장별 하자율 통계 및 리스크 분석 현황입니다.</p>
-          </div>
+      <div className="bg-[#14532D] text-white px-6 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+          <Image src="/logo.png" alt="TreeCS" width={32} height={32} className="object-contain" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">분석</h1>
+          <p className="text-xs text-green-200 mt-0.5">현장별 하자율 통계 및 리스크 분석 현황입니다.</p>
         </div>
       </div>
 
-      <div className="px-6 py-5 space-y-6">
+      <div className="px-6 py-6 space-y-6">
 
       {!hasData ? (
-        <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center py-24 text-[#9CA3AF]">
           <p className="text-sm">분석할 데이터가 없습니다.</p>
           <p className="text-xs mt-1">설정 &gt; 업로드에서 하자율 예측 분석 엑셀을 업로드하세요.</p>
         </div>
       ) : (
         <>
-          {/* 요약 카드 */}
+          {/* ── KPI 카드 4개 ── */}
           <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">총 식재 수량</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">{totalPlanted > 0 ? totalPlanted.toLocaleString() : '-'}</p>
-                <p className="text-xs text-muted-foreground">주</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">전체 하자율</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className={`text-2xl font-bold ${overallRate !== null && overallRate >= 0.20 ? 'text-red-500' : overallRate !== null && overallRate >= 0.10 ? 'text-yellow-500' : ''}`}>
+            {/* 총 식재 수량 */}
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-11 h-11 rounded-full bg-[#DCFCE7] flex items-center justify-center shrink-0">
+                <Leaf className="w-5 h-5 text-[#14532D]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-[#6B7280] font-medium mb-0.5">총 식재 수량</p>
+                <p className="text-2xl font-bold text-[#111827] leading-none">
+                  {totalPlanted > 0 ? totalPlanted.toLocaleString() : '-'}
+                  <span className="text-sm font-normal text-[#6B7280] ml-1">주</span>
+                </p>
+                <p className="text-xs text-[#9CA3AF] mt-1">분석 기준 전체 데이터</p>
+              </div>
+            </div>
+
+            {/* 전체 하자율 */}
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-11 h-11 rounded-full bg-[#FEF3C7] flex items-center justify-center shrink-0">
+                <TrendingDown className="w-5 h-5 text-[#D97706]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-[#6B7280] font-medium mb-0.5">전체 하자율</p>
+                <p className={`text-2xl font-bold leading-none ${overallRate !== null && overallRate >= 0.20 ? 'text-[#EF4444]' : overallRate !== null && overallRate >= 0.10 ? 'text-[#F59E0B]' : 'text-[#111827]'}`}>
                   {overallRate !== null ? `${(overallRate * 100).toFixed(1)}%` : '-'}
                 </p>
-                <p className="text-xs text-muted-foreground">전체 식재 기준</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">예상 하자 수량</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className={`text-2xl font-bold ${totalPlantDefect > 0 ? 'text-red-500' : ''}`}>
-                  {totalPlantDefect > 0 ? totalPlantDefect.toLocaleString() : '-'}
+                <p className="text-xs text-[#9CA3AF] mt-1">전체 식재 기준</p>
+              </div>
+            </div>
+
+            {/* 고위험 수종 */}
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-11 h-11 rounded-full bg-[#FEE2E2] flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-[#EF4444]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-[#6B7280] font-medium mb-0.5">고위험 수종</p>
+                <p className="text-2xl font-bold text-[#EF4444] leading-none">
+                  {riskHigh > 0 ? riskHigh : '-'}
+                  <span className="text-sm font-normal text-[#6B7280] ml-1">종</span>
                 </p>
-                <p className="text-xs text-muted-foreground">하자 수량 (점검 기준)</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">예상 하자 저감 비용</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-orange-500">
+                <p className="text-xs text-[#9CA3AF] mt-1">하자율 20% 이상</p>
+              </div>
+            </div>
+
+            {/* 예상 하자관리비용 */}
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow">
+              <div className="w-11 h-11 rounded-full bg-[#ECFDF5] flex items-center justify-center shrink-0">
+                <Calculator className="w-5 h-5 text-[#166534]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-[#6B7280] font-medium mb-0.5">예상 하자관리비용</p>
+                <p className="text-xl font-bold text-[#D97706] leading-none truncate">
                   {totalReserveCost > 0 ? `₩${totalReserveCost.toLocaleString()}` : '-'}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {totalReserveCost > 0 ? '조달청 단가 기준' : '예측 데이터 없음'}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* 리스크 요약 배너 — speciesData 기준으로 통일 */}
-          {speciesData.length > 0 && (() => {
-            const high = speciesData.filter((s) => s.defect_rate >= 0.20).length
-            const mid  = speciesData.filter((s) => s.defect_rate >= 0.10 && s.defect_rate < 0.20).length
-            const low  = speciesData.filter((s) => s.defect_rate < 0.10).length
-            return (
-              <div className="flex items-center gap-6 rounded-lg border bg-muted/30 px-5 py-3 text-sm">
-                <span className="font-medium text-muted-foreground">리스크 현황</span>
-                {high > 0 && (
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
-                    <span className="font-semibold text-red-600">고위험 {high}종</span>
-                    <span className="text-muted-foreground">(≥20%)</span>
-                  </span>
-                )}
-                {mid > 0 && (
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
-                    <span className="font-semibold text-yellow-600">중위험 {mid}종</span>
-                    <span className="text-muted-foreground">(10–20%)</span>
-                  </span>
-                )}
-                {low > 0 && (
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-                    <span className="font-semibold text-green-600">저위험 {low}종</span>
-                    <span className="text-muted-foreground">(&lt;10%)</span>
-                  </span>
-                )}
+                <p className="text-xs text-[#9CA3AF] mt-1">조달청 단가 기준</p>
               </div>
-            )
-          })()}
-
-          {/* 1행: 연도별 + 계절별 */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">연도별 하자율 추이</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {yearlyData.length > 0 ? (
-                  <YearlyDefectChart data={yearlyData} />
-                ) : (
-                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">데이터 없음</div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  계절별 하자율
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">입주시기 기준</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {seasonData.length > 0 ? (
-                  <SeasonDefectChart data={seasonData} />
-                ) : (
-                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">데이터 없음</div>
-                )}
-              </CardContent>
-            </Card>
+            </div>
           </div>
 
-          {/* 2행: 수종별 + 협력사별 */}
+          {/* ── 리스크 현황 Chip ── */}
+          {speciesData.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 bg-white rounded-2xl border border-[#E5E7EB] px-5 py-3">
+              <span className="text-sm font-semibold text-[#374151] mr-2">리스크 현황</span>
+              {riskHigh > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEE2E2] text-[#DC2626] text-xs font-semibold">
+                  🔴 고위험 {riskHigh}종 <span className="font-normal text-[#EF4444]">(≥20%)</span>
+                </span>
+              )}
+              {riskMid > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] text-[#D97706] text-xs font-semibold">
+                  🟠 중위험 {riskMid}종 <span className="font-normal text-[#F59E0B]">(10–20%)</span>
+                </span>
+              )}
+              {riskLow > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#DCFCE7] text-[#166534] text-xs font-semibold">
+                  🟢 저위험 {riskLow}종 <span className="font-normal text-[#22C55E]">(&lt;10%)</span>
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* ── 1행: 연도별 + 계절별 ── */}
           <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">수종별 하자율 <span className="text-sm font-normal text-muted-foreground">(상위 15종)</span></CardTitle>
-              </CardHeader>
-              <CardContent>
-                {speciesData.length > 0 ? (
-                  <SpeciesDefectChart data={speciesData} />
-                ) : (
-                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">데이터 없음</div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">협력사별 하자율</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {contractorData.length > 0 ? (
-                  <ContractorDefectChart data={contractorData} />
-                ) : (
-                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">데이터 없음</div>
-                )}
-              </CardContent>
-            </Card>
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+              <h2 className="text-sm font-semibold text-[#111827] mb-4">연도별 하자율 추이</h2>
+              {yearlyData.length > 0 ? (
+                <YearlyDefectChart data={yearlyData} />
+              ) : (
+                <div className="flex h-[240px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
+              )}
+            </div>
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+              <h2 className="text-sm font-semibold text-[#111827] mb-4">
+                계절별 하자율
+                <span className="ml-2 text-xs font-normal text-[#9CA3AF]">입주시기 기준</span>
+              </h2>
+              {seasonData.length > 0 ? (
+                <SeasonDefectChart data={seasonData} />
+              ) : (
+                <div className="flex h-[240px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
+              )}
+            </div>
           </div>
 
-          {/* 수종별 계절 히트맵 */}
+          {/* ── 2행: 수종별 TOP10 + 협력사별 TOP10 ── */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+              <h2 className="text-sm font-semibold text-[#111827] mb-1">
+                수종별 하자율 TOP 10
+              </h2>
+              {speciesData.length > 0 ? (
+                <SpeciesDefectChart data={speciesData} />
+              ) : (
+                <div className="flex h-[260px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
+              )}
+            </div>
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+              <h2 className="text-sm font-semibold text-[#111827] mb-1">
+                협력사별 하자율 TOP 10
+              </h2>
+              {contractorData.length > 0 ? (
+                <ContractorDefectChart data={contractorData} />
+              ) : (
+                <div className="flex h-[260px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── 수종별 계절 히트맵 ── */}
           {heatmapData.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  수종별 계절 하자율 히트맵
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    입주시기 기준 · 상위 {heatmapData.length}종
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SpeciesSeasonHeatmap data={heatmapData} />
-              </CardContent>
-            </Card>
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[#111827]">수종별 계절 하자율 히트맵</h2>
+                  <p className="text-xs text-[#9CA3AF] mt-0.5">계절별 하자율 분포를 한눈에 확인할 수 있습니다.</p>
+                </div>
+                <span className="text-xs text-[#9CA3AF]">입주시기 기준 · 상위 {heatmapData.length}종</span>
+              </div>
+              <SpeciesSeasonHeatmap data={heatmapData} />
+            </div>
           )}
 
         </>
