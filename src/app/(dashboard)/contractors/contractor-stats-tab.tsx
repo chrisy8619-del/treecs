@@ -318,7 +318,7 @@ export function ContractorStatsTab({ stats, year }: Props) {
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
-              <Tooltip formatter={(v: number) => [`${v}%`, '하자율']} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', fontSize: 12 }} />
+              <Tooltip formatter={(v: unknown) => [`${v}%`, '하자율']} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', fontSize: 12 }} />
               <ReferenceLine y={20} stroke="#EF4444" strokeDasharray="4 4" label={{ value: '기준선 20%', position: 'right', fontSize: 10, fill: '#EF4444' }} />
               <Area type="monotone" dataKey="하자율" stroke="#14532D" strokeWidth={2.5} fill="url(#contractorAreaGradient)" dot={{ r: 4, fill: '#14532D', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, fill: '#14532D', stroke: '#fff', strokeWidth: 2 }} />
             </AreaChart>
@@ -341,7 +341,7 @@ export function ContractorStatsTab({ stats, year }: Props) {
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
               <XAxis dataKey="grade" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
               <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v: number) => [`${v}개사`, '협력사 수']} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', fontSize: 12 }} />
+              <Tooltip formatter={(v: unknown) => [`${v}개사`, '협력사 수']} contentStyle={{ borderRadius: '12px', border: '1px solid #E5E7EB', fontSize: 12 }} />
               <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={60}>
                 {[gradeA, gradeB, gradeC].map((_, i) => (
                   <Cell key={i} fill={['#22C55E', '#F59E0B', '#EF4444'][i]} />
