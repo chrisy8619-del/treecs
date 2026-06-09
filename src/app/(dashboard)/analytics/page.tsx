@@ -459,8 +459,20 @@ export default async function AnalyticsPage() {
             </div>
           )}
 
-          {/* 1행: 계절별 + 수종별 */}
+          {/* 1행: 연도별 + 계절별 */}
           <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">연도별 하자율 추이</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {yearlyData.length > 0 ? (
+                  <YearlyDefectChart data={yearlyData} />
+                ) : (
+                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">데이터 없음</div>
+                )}
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
@@ -476,6 +488,10 @@ export default async function AnalyticsPage() {
                 )}
               </CardContent>
             </Card>
+          </div>
+
+          {/* 2행: 수종별 + 협력사별 */}
+          <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">수종별 하자율 <span className="text-sm font-normal text-muted-foreground">(상위 15종)</span></CardTitle>
@@ -488,10 +504,6 @@ export default async function AnalyticsPage() {
                 )}
               </CardContent>
             </Card>
-          </div>
-
-          {/* 2행: 시공사별 + 연도별 */}
-          <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">협력사별 하자율</CardTitle>
@@ -499,18 +511,6 @@ export default async function AnalyticsPage() {
               <CardContent>
                 {contractorData.length > 0 ? (
                   <ContractorDefectChart data={contractorData} />
-                ) : (
-                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">데이터 없음</div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">연도별 하자율 추이</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {yearlyData.length > 0 ? (
-                  <YearlyDefectChart data={yearlyData} />
                 ) : (
                   <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">데이터 없음</div>
                 )}
