@@ -302,11 +302,26 @@ async function getAnalyticsData() {
     }))
     .sort((a, b) => b.reserve_cost - a.reserve_cost)
 
-  // 요약 통계
-  const totalInspected = items.reduce((s, i) => s + (i.quantity_inspected ?? 0), 0)
-  const totalDefect = items.reduce((s, i) => s + (i.defect_quantity ?? 0), 0)
-  const overallRate = totalInspected > 0 ? totalDefect / totalInspected : null
-  const highRiskSites = siteData.filter((s) => s.defect_rate >= 0.20).length
+  // 요약 통계 — 식재기록 기반
+  const totalPlanted = plantings.reduce((s, p) => s + (p.quantity_planted ?? 0), 0)
+  const totalPlantDefect = plantings.reduce((s, p) => {
+    const qty = p.quantity_planted ?? 0
+    const defect = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
+    return s + defect
+  }, 0)
+  const overallRate = totalPlanted > 0 ? totalPlantDefect / totalPlanted : null
+
+  // 현장별 식재기록 기반 하자율 집계 → 고위험 현장(20% 이상) 카운트
+  const plantSiteMap = new Map<string, { qty: number; defectQty: number }>()
+  for (const p of plantings) {
+    const sid = p.site_id as string
+    if (!sid) continue
+    const qty = p.quantity_planted ?? 0
+    const defect = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
+    const prev = plantSiteMap.get(sid) ?? { qty: 0, defectQty: 0 }
+    plantSiteMap.set(sid, { qty: prev.qty + qty, defectQty: prev.defectQty + defect })
+  }
+  const highRiskSites = [...plantSiteMap.values()].filter((v) => v.qty > 0 && v.defectQty / v.qty >= 0.20).length
 
   // 예비비 합계
   const totalReserveCost = siteReserveData.reduce((s, v) => s + v.reserve_cost, 0)
@@ -326,7 +341,7 @@ async function getAnalyticsData() {
   return {
     yearlyData, seasonData, contractorData, siteData, speciesData,
     siteReserveData, totalReserveCost, riskCounts, heatmapData,
-    totalInspected, totalDefect, overallRate, highRiskSites,
+    totalPlanted, overallRate, highRiskSites,
     hasPlantingAnalysis: plantings.length > 0,
   }
 }
@@ -339,7 +354,7 @@ export default async function AnalyticsPage() {
   const {
     yearlyData, seasonData, contractorData, siteData, speciesData,
     siteReserveData, totalReserveCost, riskCounts, heatmapData,
-    totalInspected, totalDefect, overallRate, highRiskSites,
+    totalPlanted, overallRate, highRiskSites,
     hasPlantingAnalysis,
   } = await getAnalyticsData()
 
@@ -373,10 +388,10 @@ export default async function AnalyticsPage() {
           <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">총 점검 수량</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">총 식재 수량</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">{totalInspected > 0 ? totalInspected.toLocaleString() : '-'}</p>
+                <p className="text-2xl font-bold">{totalPlanted > 0 ? totalPlanted.toLocaleString() : '-'}</p>
                 <p className="text-xs text-muted-foreground">주</p>
               </CardContent>
             </Card>
@@ -388,7 +403,7 @@ export default async function AnalyticsPage() {
                 <p className={`text-2xl font-bold ${overallRate !== null && overallRate >= 0.20 ? 'text-red-500' : overallRate !== null && overallRate >= 0.10 ? 'text-yellow-500' : ''}`}>
                   {overallRate !== null ? `${(overallRate * 100).toFixed(1)}%` : '-'}
                 </p>
-                <p className="text-xs text-muted-foreground">전체 점검 기준</p>
+                <p className="text-xs text-muted-foreground">전체 식재 기준</p>
               </CardContent>
             </Card>
             <Card>
@@ -408,10 +423,10 @@ export default async function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold text-orange-500">
-                  {totalReserveCost > 0 ? `₩${(totalReserveCost / 1000000).toFixed(1)}M` : '-'}
+                  {totalReserveCost > 0 ? `₩${totalReserveCost.toLocaleString()}` : '-'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {totalReserveCost > 0 ? `₩${totalReserveCost.toLocaleString()}` : '예측 데이터 없음'}
+                  {totalReserveCost > 0 ? '원' : '예측 데이터 없음'}
                 </p>
               </CardContent>
             </Card>
