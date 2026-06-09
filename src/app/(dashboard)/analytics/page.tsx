@@ -229,22 +229,12 @@ async function getAnalyticsData() {
     .map((v) => ({ name: v.name, defect_rate: v.inspected > 0 ? v.defect / v.inspected : 0, inspected: v.inspected, defect: v.defect }))
     .sort((a, b) => b.defect_rate - a.defect_rate)
 
-  // 수종별
+  // 수종별 — planting_records 기반으로 집계 (전체 식재 기준, row limit은 최대 1000행이지만 배너 비율 집계용)
+  // inspection_items가 있는 경우 수종별로 합산(덮어쓰기 아님)
   const spMap = new Map<string, { inspected: number; defect: number }>()
-  for (const item of items) {
-    const sp = Array.isArray(item.species) ? item.species[0] : item.species
-    const name = sp?.species_name_ko ?? '알 수 없음'
-    const prev = spMap.get(name) ?? { inspected: 0, defect: 0 }
-    spMap.set(name, {
-      inspected: prev.inspected + (item.quantity_inspected ?? 0),
-      defect: prev.defect + (item.defect_quantity ?? 0),
-    })
-  }
-  // 식재기록 기반 수종별도 보완
   for (const p of plantings) {
     const sp = Array.isArray(p.species) ? p.species[0] : p.species
     const name = sp?.species_name_ko ?? '알 수 없음'
-    if (spMap.has(name)) continue // 이미 점검 데이터 있으면 스킵
     const qty = p.quantity_planted ?? 0
     const defectQty = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
     const prev = spMap.get(name) ?? { inspected: 0, defect: 0 }
