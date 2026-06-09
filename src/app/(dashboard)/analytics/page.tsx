@@ -25,7 +25,7 @@ function riskLabel(rate: number) {
 async function getAnalyticsData() {
   const supabase = await createClient()
 
-  const [yearlyRes, itemsRes, contractorRes, plantingRes] = await Promise.all([
+  const [yearlyRes, itemsRes, contractorRes, plantingRes, plantingSummaryRes] = await Promise.all([
     supabase
       .from('agg_metrics_by_year')
       .select('year, total_quantity, total_defect_quantity, defect_rate')
@@ -44,7 +44,7 @@ async function getAnalyticsData() {
       .from('agg_metrics_by_contractor')
       .select('total_quantity, total_defect_quantity, defect_rate, contractors(contractor_name)')
       .order('defect_rate', { ascending: false }),
-    // 하자율 예측 데이터: 식재기록 기반 예비비·계절·협력사·연도 분석
+    // 하자율 예측 데이터: 식재기록 기반 예비비·계절·협력사·연도 분석 (최대 1000행)
     supabase
       .from('planting_records')
       .select(`
@@ -60,6 +60,8 @@ async function getAnalyticsData() {
         species ( species_name_ko ),
         contractors ( contractor_name )
       `),
+    // 총 식재 수량·하자수량 전체 집계 (DB 집계 함수 사용으로 row limit 우회)
+    supabase.rpc('get_planting_summary'),
   ])
 
   const items = itemsRes.data ?? []
@@ -301,26 +303,27 @@ async function getAnalyticsData() {
     }))
     .sort((a, b) => b.reserve_cost - a.reserve_cost)
 
-  // 요약 통계 — 식재기록 기반
-  const totalPlanted = plantings.reduce((s, p) => s + (p.quantity_planted ?? 0), 0)
-  const totalPlantDefect = plantings.reduce((s, p) => {
+  // 요약 통계 — DB 집계 함수 기반 (row limit 우회)
+  const summary = plantingSummaryRes.data as { total_planted: number; total_defect: number; high_risk_sites: number } | null
+  const totalPlanted = summary?.total_planted ?? plantings.reduce((s, p) => s + (p.quantity_planted ?? 0), 0)
+  const totalPlantDefect = summary?.total_defect ?? plantings.reduce((s, p) => {
     const qty = p.quantity_planted ?? 0
     const defect = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
     return s + defect
   }, 0)
   const overallRate = totalPlanted > 0 ? totalPlantDefect / totalPlanted : null
-
-  // 현장별 식재기록 기반 하자율 집계 → 고위험 현장(20% 이상) 카운트
-  const plantSiteMap = new Map<string, { qty: number; defectQty: number }>()
-  for (const p of plantings) {
-    const sid = p.site_id as string
-    if (!sid) continue
-    const qty = p.quantity_planted ?? 0
-    const defect = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
-    const prev = plantSiteMap.get(sid) ?? { qty: 0, defectQty: 0 }
-    plantSiteMap.set(sid, { qty: prev.qty + qty, defectQty: prev.defectQty + defect })
-  }
-  const highRiskSites = [...plantSiteMap.values()].filter((v) => v.qty > 0 && v.defectQty / v.qty >= 0.20).length
+  const highRiskSites = summary?.high_risk_sites ?? (() => {
+    const plantSiteMap = new Map<string, { qty: number; defectQty: number }>()
+    for (const p of plantings) {
+      const sid = p.site_id as string
+      if (!sid) continue
+      const qty = p.quantity_planted ?? 0
+      const defect = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
+      const prev = plantSiteMap.get(sid) ?? { qty: 0, defectQty: 0 }
+      plantSiteMap.set(sid, { qty: prev.qty + qty, defectQty: prev.defectQty + defect })
+    }
+    return [...plantSiteMap.values()].filter((v) => v.qty > 0 && v.defectQty / v.qty >= 0.20).length
+  })()
 
   // 예비비 합계
   const totalReserveCost = siteReserveData.reduce((s, v) => s + v.reserve_cost, 0)
