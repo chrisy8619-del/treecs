@@ -308,7 +308,7 @@ async function getAnalyticsData() {
   return {
     yearlyData, seasonData, contractorData, siteData, speciesData,
     siteReserveData, totalReserveCost, heatmapData,
-    totalPlanted, overallRate,
+    totalPlanted, totalPlantDefect, overallRate,
     hasPlantingAnalysis: plantings.length > 0,
   }
 }
@@ -321,12 +321,11 @@ export default async function AnalyticsPage() {
   const {
     yearlyData, seasonData, contractorData, siteData, speciesData,
     siteReserveData, totalReserveCost, heatmapData,
-    totalPlanted, overallRate,
+    totalPlanted, totalPlantDefect, overallRate,
     hasPlantingAnalysis,
   } = await getAnalyticsData()
 
   const hasData = siteData.length > 0 || yearlyData.length > 0 || hasPlantingAnalysis
-  const highRiskSpeciesCount = speciesData.filter((s) => s.defect_rate >= 0.20).length
 
   return (
     <div className="space-y-0 -m-6">
@@ -376,18 +375,18 @@ export default async function AnalyticsPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">고위험 수종</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">예상 하자 수량</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${highRiskSpeciesCount > 0 ? 'text-red-500' : ''}`}>
-                  {highRiskSpeciesCount > 0 ? highRiskSpeciesCount.toLocaleString() : '-'}
+                <p className={`text-2xl font-bold ${totalPlantDefect > 0 ? 'text-red-500' : ''}`}>
+                  {totalPlantDefect > 0 ? totalPlantDefect.toLocaleString() : '-'}
                 </p>
-                <p className="text-xs text-muted-foreground">하자율 20% 이상</p>
+                <p className="text-xs text-muted-foreground">주</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">예상 하자 관리비용</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">예상 하자 저감 비용</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold text-orange-500">
