@@ -10,6 +10,8 @@ export const SEASON_CODE_TO_KO: Record<string, string> = {
 export const SEASON_ORDER = ['spring', 'summer', 'fall', 'winter'] as const
 export type SeasonCode = typeof SEASON_ORDER[number]
 
+export const KOREAN_SEASONS = new Set(['봄', '여름', '가을', '겨울'])
+
 // 계절(수식) P열 → 식재 계절 변환
 // 예) P열=봄(조사 계절) → 식재는 한 계절 전인 겨울
 const PREV_SEASON: Record<string, string> = {

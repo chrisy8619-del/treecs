@@ -8,7 +8,7 @@ import {
   TrendingDown, TreePine, Leaf, AlertTriangle, Target,
 } from 'lucide-react'
 import { uploadSubstitutions } from '@/app/actions/substitution'
-import { resolveSeasonCode, SEASON_CODE_TO_KO, SEASON_ORDER } from '@/lib/season-utils'
+import { resolveSeasonCode, SEASON_CODE_TO_KO, SEASON_ORDER, KOREAN_SEASONS } from '@/lib/season-utils'
 import { getRecommendedSubstitutes, mapRegion } from '@/lib/species-knowledge'
 
 export type SiteOption = {
@@ -157,12 +157,12 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
       matchedRegions.push(...altRecs.map((r) => r.region))
     }
 
-    // 현장 내 수종별 계절 (planting_season → 한국어 계절)
+    // 현장 내 수종별 계절 (planting_season → 한국어 계절, 영어 코드/한국어 모두 지원)
     const seasonMap = new Map<string, string>()
     for (const row of siteRows) {
       if (!row.species_name || !row.planting_season) continue
-      const seasonKo: Record<string, string> = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울' }
-      const ko = seasonKo[row.planting_season] ?? null
+      const val = row.planting_season
+      const ko = SEASON_CODE_TO_KO[val] ?? (KOREAN_SEASONS.has(val) ? val : null)
       if (ko && !seasonMap.has(row.species_name)) seasonMap.set(row.species_name, ko)
     }
 
@@ -522,7 +522,10 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
     const rowsWithSeason = siteRows.map((r) => ({
       ...r,
       resolvedSeason: resolveSeasonCode(
-        r.planting_season ? SEASON_CODE_TO_KO[r.planting_season] : null,
+        // DB에 영어 코드('spring') 또는 한국어('봄') 모두 처리
+        r.planting_season
+          ? (SEASON_CODE_TO_KO[r.planting_season] ?? (KOREAN_SEASONS.has(r.planting_season) ? r.planting_season : null))
+          : null,
         r.planting_date,
       ),
     }))
