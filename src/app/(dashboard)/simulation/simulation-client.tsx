@@ -563,21 +563,34 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
           return s + rate * r.quantity_planted
         }, 0) / originalTotalQty
       : 0
+    // 입주 시기별 고정 분석 문구
+    const SEASONAL_IMPACT_BY_OCCUPANCY: Record<string, string> = {
+      winter: `① 겨울 입주 현장 (가을 식재 시행)\n\n가을철 식재 후 입주 시점이 동절기에 해당하는 현장의 경우, 수목의 활착이 완료되기 이전에 혹한 및 동결 환경에 노출됨으로써 동해(凍害) 피해 발생 가능성이 현저히 높아진다. 이에 따라 내한성(耐寒性)이 취약한 수종—블루엔젤, 대왕참나무 등 동해 민감종—의 가을 식재는 지양하는 것이 바람직하며, 해당 수종은 내한성이 확보된 대체 수종으로 우선 적용하여 동절기 하자를 사전에 억제하는 식재 계획을 수립하였다.`,
+      fall: `② 가을 입주 현장 (여름 식재 시행)\n\n가을 입주 현장에서 하절기 식재가 시행된 경우, 고온 다습한 환경과 강한 일사(日射)로 인해 수분 증산량이 급격히 증가하여 건조 피해 및 열해(熱害) 발생 위험이 높다. 이를 방지하기 위해 식재 직후부터 입주 시점까지 정기적인 관수(灌水) 및 토양 수분 유지 관리를 병행하되, 근본적인 하자 저감을 위해 내건성(耐乾性) 및 내열성(耐熱性)이 우수한 수종을 대체 식재 수종으로 우선 선정·적용하는 방향으로 식재 계획을 조정하였다.`,
+      summer: `③ 여름 입주 현장 (봄 식재 시행)\n\n봄철 식재 후 여름 입주가 이루어지는 현장은 식재 시점의 온도 조건이 비교적 온화하여 활착에 유리한 환경을 형성한다. 다만, 수목의 생육 안정성을 장기적으로 확보하기 위해서는 해당 지역의 기후 특성과 계절적 생육 조건에 부합하는 적합 수종 선정이 필수적이다. 이에 지역 생태 환경 및 봄철 식재 적정 수종 기준을 검토하여 현장 여건에 최적화된 대체 수종을 선별·적용함으로써 식재 품질의 균일성을 확보하는 계획을 반영하였다.`,
+      spring: `④ 봄 입주 현장 (동절기 식재 시행)\n\n봄철 입주를 목표로 동절기에 식재가 시행되는 경우, 저온으로 인한 수목 고사(枯死) 위험을 최소화하기 위해 볏짚 피복, 수간 보온재 감기, 방풍망 설치 등 동해 방지를 위한 보온 조치를 의무적으로 병행하여야 한다. 아울러 동절기 저온 환경에서도 뿌리 활착 능력이 우수하고 내한성이 강한 수종을 대체 식재 수종으로 우선 도입함으로써, 혹한기 식재에 따른 하자 발생률을 효과적으로 저감하는 식재 계획을 수립하였다.`,
+    }
+
+    // 선택 현장의 입주일로 입주 계절 판별
+    const selectedSite = sites.find((s) => s.id === selectedSiteId)
+    const occupancyDate = selectedSite?.occupancy_date ? new Date(selectedSite.occupancy_date) : null
+    let occupancySeason: string | null = null
+    if (occupancyDate && !isNaN(occupancyDate.getTime())) {
+      const m = occupancyDate.getMonth() + 1
+      if (m >= 3 && m <= 5) occupancySeason = 'spring'
+      else if (m >= 6 && m <= 8) occupancySeason = 'summer'
+      else if (m >= 9 && m <= 11) occupancySeason = 'fall'
+      else occupancySeason = 'winter'
+    }
+
     let seasonalImpact: string
-    if (seasonStats.length === 0) {
+    if (occupancySeason && SEASONAL_IMPACT_BY_OCCUPANCY[occupancySeason]) {
+      seasonalImpact = SEASONAL_IMPACT_BY_OCCUPANCY[occupancySeason]
+    } else if (seasonStats.length === 0) {
       seasonalImpact = '식재일자 또는 계절(수식) 데이터가 없어 식재 시기별 분석을 수행할 수 없습니다.'
-    } else if (sortedByRate.length === 1) {
-      const s = sortedByRate[0]
-      const diff = ((s.rate - overallRate) * 100).toFixed(1)
-      seasonalImpact = `${s.label} 식재 수목의 하자율(${(s.rate * 100).toFixed(1)}%)이 전체 평균(${(overallRate * 100).toFixed(1)}%) 대비 ${Number(diff) >= 0 ? diff + '%p 높게' : Math.abs(Number(diff)) + '%p 낮게'} 나타났습니다.` +
-        (s.topSpecies.length > 0 ? ` ${s.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '')
     } else {
-      const worst = sortedByRate[0]
-      const best = sortedByRate[sortedByRate.length - 1]
-      const diff = ((worst.rate - overallRate) * 100).toFixed(1)
-      seasonalImpact = `${worst.label} 식재 수목의 하자율이 가장 높으며, 전체 평균 대비 ${diff}%p 높게 나타났습니다.` +
-        (worst.topSpecies.length > 0 ? ` ${worst.topSpecies.join('과 ')}에서 집중적으로 발생했습니다.` : '') +
-        ` ${best.label} 식재(${(best.rate * 100).toFixed(1)}%) 대비 ${((worst.rate - best.rate) * 100).toFixed(1)}%p 차이로, 식재 시기 조정을 검토하십시오.`
+      // 입주일 없는 경우 식재 데이터 기반 모든 항목 표시
+      seasonalImpact = Object.values(SEASONAL_IMPACT_BY_OCCUPANCY).join('\n\n')
     }
 
     setAiAnalysis({ riskLevel, recommendReason, effectSummary, actionGuide, seasonalImpact, seasonStats })
@@ -950,7 +963,7 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
             <div className="border-t px-4 py-3 text-xs">
               <div className="flex items-center gap-1.5 mb-2">
                 <Leaf className={`h-3.5 w-3.5 ${aiAnalysis ? 'text-green-500' : 'text-gray-400'}`} />
-                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>식재 시기 영향 분석</span>
+                <span className={`font-semibold ${aiAnalysis ? 'text-gray-700' : 'text-gray-600'}`}>식재 시기 영향 분석 — 시기별 하자 원인 분석 및 개선 방향</span>
               </div>
               {aiGenerating ? (
                 <div className="flex gap-8">
@@ -965,7 +978,11 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                 </div>
               ) : aiAnalysis ? (
                 <div className="flex gap-8 items-start">
-                  <p className="text-gray-700 leading-relaxed flex-1">{aiAnalysis.seasonalImpact}</p>
+                  <div className="text-gray-700 leading-relaxed flex-1 space-y-3">
+                    {aiAnalysis.seasonalImpact.split('\n\n').map((para, i) => (
+                      <p key={i} className={i === 0 ? 'font-semibold text-gray-800' : ''}>{para}</p>
+                    ))}
+                  </div>
                   {aiAnalysis.seasonStats.length > 0 && (
                     <div className="space-y-1.5 w-52 shrink-0">
                       {(() => {
