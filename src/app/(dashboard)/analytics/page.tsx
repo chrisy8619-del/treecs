@@ -59,8 +59,7 @@ async function getAnalyticsData() {
         risk_level,
         species ( species_name_ko ),
         contractors ( contractor_name )
-      `)
-      .limit(10000),
+      `),
   ])
 
   const items = itemsRes.data ?? []
