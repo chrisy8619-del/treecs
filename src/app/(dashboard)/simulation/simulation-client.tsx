@@ -988,7 +988,8 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                   const speciesAvgRateVal = row.speciesName && speciesAvgRate[row.speciesName] != null
                     ? speciesAvgRate[row.speciesName] : null
                   const risk = riskConfig(speciesAvgRateVal)
-                  const isLowRisk = row.risk_level === '저위험'
+                  // 수목하자율 기준 고위험(≥20%)만 대체 수종 선택 표시
+                  const isHighRisk = speciesAvgRateVal != null && speciesAvgRateVal >= 0.20
                   const hasSubOptions = row.substituteOptions.length > 0
                   const speciesAvgRatePct = speciesAvgRateVal != null
                     ? (speciesAvgRateVal * 100).toFixed(2) + '%' : '-'
@@ -1012,11 +1013,7 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                         ) : <span className="text-gray-300">-</span>}
                       </td>
                       <td className="px-3 py-2">
-                        {isLowRisk || !hasSubOptions ? (
-                          <span className="text-xs text-gray-400 px-2 py-1 bg-gray-100 rounded">
-                            {isLowRisk ? '유지 관리' : '등록된 대체수종 없음'}
-                          </span>
-                        ) : (
+                        {isHighRisk && hasSubOptions ? (
                           <div className="relative">
                             <select
                               value={row.selectedSubstituteName ?? ''}
@@ -1032,6 +1029,10 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                             </select>
                             <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
                           </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 px-2 py-1 bg-gray-100 rounded">
+                            유지 관리
+                          </span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-right text-blue-600 font-medium">{improvedRatePct}</td>
@@ -1044,10 +1045,10 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                       <td className="px-3 py-2 whitespace-nowrap">
                         {row.selectedSubstituteName ? (
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">대체 권장</span>
-                        ) : isLowRisk ? (
-                          <span className="px-2 py-0.5 rounded text-xs text-gray-400 bg-gray-100">유지 관리</span>
-                        ) : (
+                        ) : isHighRisk ? (
                           <span className="px-2 py-0.5 rounded text-xs text-gray-500 bg-gray-100">대체 수종 선택</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-xs text-gray-400 bg-gray-100">유지 관리</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-gray-400">{row.selectedSubstituteName ? '즉시 교체 검토' : '-'}</td>
