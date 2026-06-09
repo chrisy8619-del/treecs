@@ -14,7 +14,7 @@ import {
 } from './charts'
 import { SiteAnalysisTable } from './site-analysis-table'
 import { SpeciesAnalysisTable } from './species-analysis-table'
-import { resolveSeasonCode, safeNumZero, calcRiskLevel, SEASON_ORDER, SEASON_CODE_TO_KO } from '@/lib/season-utils'
+import { resolveSeasonCode, safeNumZero, SEASON_ORDER, SEASON_CODE_TO_KO } from '@/lib/season-utils'
 
 function riskLabel(rate: number) {
   if (rate >= 0.20) return '🔴 고위험'
@@ -304,23 +304,10 @@ async function getAnalyticsData() {
   // 예비비 합계
   const totalReserveCost = siteReserveData.reduce((s, v) => s + v.reserve_cost, 0)
 
-  // 리스크 카운트 — DB 집계 함수 우선, 없으면 1000행 기준 폴백
-  const riskCounts = summary
-    ? { high: summary.high_risk_species, mid: summary.mid_risk_species, low: summary.low_risk_species }
-    : plantings.reduce(
-        (acc, p) => {
-          const level = p.risk_level ?? (p.expected_defect_rate != null ? calcRiskLevel(p.expected_defect_rate) : null)
-          if (level === '고위험') acc.high++
-          else if (level === '중위험') acc.mid++
-          else if (level === '저위험') acc.low++
-          return acc
-        },
-        { high: 0, mid: 0, low: 0 }
-      )
 
   return {
     yearlyData, seasonData, contractorData, siteData, speciesData,
-    siteReserveData, totalReserveCost, riskCounts, heatmapData,
+    siteReserveData, totalReserveCost, heatmapData,
     totalPlanted, overallRate,
     hasPlantingAnalysis: plantings.length > 0,
   }
@@ -333,7 +320,7 @@ export default async function AnalyticsPage() {
 
   const {
     yearlyData, seasonData, contractorData, siteData, speciesData,
-    siteReserveData, totalReserveCost, riskCounts, heatmapData,
+    siteReserveData, totalReserveCost, heatmapData,
     totalPlanted, overallRate,
     hasPlantingAnalysis,
   } = await getAnalyticsData()
@@ -413,33 +400,38 @@ export default async function AnalyticsPage() {
             </Card>
           </div>
 
-          {/* 리스크 요약 배너 (예측 데이터 있을 때) */}
-          {hasPlantingAnalysis && (riskCounts.high > 0 || riskCounts.mid > 0) && (
-            <div className="flex items-center gap-6 rounded-lg border bg-muted/30 px-5 py-3 text-sm">
-              <span className="font-medium text-muted-foreground">리스크 현황</span>
-              {riskCounts.high > 0 && (
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
-                  <span className="font-semibold text-red-600">고위험 {riskCounts.high}종</span>
-                  <span className="text-muted-foreground">(≥20%)</span>
-                </span>
-              )}
-              {riskCounts.mid > 0 && (
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
-                  <span className="font-semibold text-yellow-600">중위험 {riskCounts.mid}종</span>
-                  <span className="text-muted-foreground">(10–20%)</span>
-                </span>
-              )}
-              {riskCounts.low > 0 && (
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-                  <span className="font-semibold text-green-600">저위험 {riskCounts.low}종</span>
-                  <span className="text-muted-foreground">(&lt;10%)</span>
-                </span>
-              )}
-            </div>
-          )}
+          {/* 리스크 요약 배너 — speciesData 기준으로 통일 */}
+          {speciesData.length > 0 && (() => {
+            const high = speciesData.filter((s) => s.defect_rate >= 0.20).length
+            const mid  = speciesData.filter((s) => s.defect_rate >= 0.10 && s.defect_rate < 0.20).length
+            const low  = speciesData.filter((s) => s.defect_rate < 0.10).length
+            return (
+              <div className="flex items-center gap-6 rounded-lg border bg-muted/30 px-5 py-3 text-sm">
+                <span className="font-medium text-muted-foreground">리스크 현황</span>
+                {high > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+                    <span className="font-semibold text-red-600">고위험 {high}종</span>
+                    <span className="text-muted-foreground">(≥20%)</span>
+                  </span>
+                )}
+                {mid > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
+                    <span className="font-semibold text-yellow-600">중위험 {mid}종</span>
+                    <span className="text-muted-foreground">(10–20%)</span>
+                  </span>
+                )}
+                {low > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+                    <span className="font-semibold text-green-600">저위험 {low}종</span>
+                    <span className="text-muted-foreground">(&lt;10%)</span>
+                  </span>
+                )}
+              </div>
+            )
+          })()}
 
           {/* 1행: 연도별 + 계절별 */}
           <div className="grid gap-6 md:grid-cols-2">
