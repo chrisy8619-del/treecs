@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -73,12 +74,12 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <Link href="/analytics" className="w-full">
               <SidebarMenuButton size="lg">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#1a3a2a] text-white text-xs font-bold">
-                  TC
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
+                  <Image src="/logo.png" alt="TreeCS 로고" width={32} height={32} className="object-contain" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">TreeCS</span>
-                  <span className="text-xs text-muted-foreground">수목 하자율 분석</span>
+                  <span className="text-xs text-muted-foreground">수목 관리 플랫폼</span>
                 </div>
               </SidebarMenuButton>
             </Link>
