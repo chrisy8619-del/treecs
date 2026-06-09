@@ -67,9 +67,10 @@ function riskConfig(rate: number | null) {
 export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs }: Props) {
   const subFileInputRef = useRef<HTMLInputElement>(null)
 
-  const [selectedSiteId, setSelectedSiteId] = useState<string>(sites[0]?.id ?? '')
-  const [codeInput, setCodeInput] = useState(sites[0]?.site_code ?? '')
-  const [nameInput, setNameInput] = useState(sites[0]?.site_name ?? '')
+  const defaultSite = sites.find((s) => s.site_name.includes('만촌자이르네')) ?? sites[0]
+  const [selectedSiteId, setSelectedSiteId] = useState<string>(defaultSite?.id ?? '')
+  const [codeInput, setCodeInput] = useState(defaultSite?.site_code ?? '')
+  const [nameInput, setNameInput] = useState(defaultSite?.site_name ?? '')
   const [codeDropdownOpen, setCodeDropdownOpen] = useState(false)
   const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
   const [siteRows, setSiteRows] = useState<PlantingRow[]>([])
