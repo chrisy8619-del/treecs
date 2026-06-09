@@ -34,5 +34,14 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(5)
 
-  return NextResponse.json({ siteCount, plantingCount, manchRecords, dashSites })
+  // planting_season 실제 값 샘플 확인
+  const manchId = (manch ?? [])[0]?.id
+  const { data: seasonSample } = manchId
+    ? await supabase.from('planting_records')
+        .select('planting_season, planting_date, expected_defect_rate, expected_defect_qty')
+        .eq('site_id', manchId)
+        .limit(10)
+    : { data: null }
+
+  return NextResponse.json({ siteCount, plantingCount, manchRecords, dashSites, seasonSample })
 }

@@ -528,10 +528,13 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
     }))
     const seasonBuckets: Record<string, { qty: number; defectQty: number; species: Map<string, { qty: number; defectQty: number }> }> = {}
     for (const r of rowsWithSeason) {
-      if (!r.resolvedSeason || r.expected_defect_rate == null) continue
+      if (!r.resolvedSeason) continue
+      // expected_defect_rate 없으면 수목하자율(speciesAvgRate) 폴백
+      const effectiveRate = r.expected_defect_rate ?? (r.species_name ? speciesAvgRate[r.species_name] : null)
+      if (effectiveRate == null) continue
       const s = r.resolvedSeason
       if (!seasonBuckets[s]) seasonBuckets[s] = { qty: 0, defectQty: 0, species: new Map() }
-      const rowDefectQty = r.expected_defect_qty ?? Math.round(r.quantity_planted * r.expected_defect_rate)
+      const rowDefectQty = r.expected_defect_qty ?? Math.round(r.quantity_planted * effectiveRate)
       seasonBuckets[s].qty += r.quantity_planted
       seasonBuckets[s].defectQty += rowDefectQty
       const spName = r.species_name ?? '알 수 없음'
@@ -552,7 +555,10 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
       })
     const sortedByRate = [...seasonStats].sort((a, b) => b.rate - a.rate)
     const overallRate = originalTotalQty > 0
-      ? siteRows.reduce((s, r) => s + (r.expected_defect_rate ?? 0) * r.quantity_planted, 0) / originalTotalQty
+      ? siteRows.reduce((s, r) => {
+          const rate = r.expected_defect_rate ?? (r.species_name ? speciesAvgRate[r.species_name] ?? 0 : 0)
+          return s + rate * r.quantity_planted
+        }, 0) / originalTotalQty
       : 0
     let seasonalImpact: string
     if (seasonStats.length === 0) {
