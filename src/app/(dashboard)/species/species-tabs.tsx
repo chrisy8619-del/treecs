@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { List, BarChart2 } from 'lucide-react'
+import { List, BarChart2, MapPin } from 'lucide-react'
 import { SpeciesListTab } from './species-list-tab'
 import { SpeciesStatsTab, type SpeciesStat } from './species-stats-tab'
+import { SpeciesFinderTab, type AltSpeciesRec, type SpeciesStatForFinder } from './species-finder-tab'
 
 type SpeciesGroup = { group_name: string } | null
 type Species = {
@@ -20,16 +21,19 @@ type Props = {
   species: Species[]
   stats: SpeciesStat[]
   isSuperadmin: boolean
+  altRecs: AltSpeciesRec[]
+  speciesStatsForFinder: SpeciesStatForFinder[]
 }
 
-type TabId = 'list' | 'stats'
+type TabId = 'stats' | 'finder' | 'list'
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'stats', label: '수목 현황', icon: <BarChart2 className="h-4 w-4" /> },
+  { id: 'finder', label: '맞춤 수종 찾기', icon: <MapPin className="h-4 w-4" /> },
   { id: 'list', label: '수종 목록', icon: <List className="h-4 w-4" /> },
 ]
 
-export function SpeciesTabs({ species, stats, isSuperadmin }: Props) {
+export function SpeciesTabs({ species, stats, isSuperadmin, altRecs, speciesStatsForFinder }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('stats')
 
   return (
@@ -53,11 +57,14 @@ export function SpeciesTabs({ species, stats, isSuperadmin }: Props) {
       </div>
 
       {/* 탭 컨텐츠 */}
-      {activeTab === 'list' && (
-        <SpeciesListTab species={species} isSuperadmin={isSuperadmin} />
-      )}
       {activeTab === 'stats' && (
         <SpeciesStatsTab stats={stats} />
+      )}
+      {activeTab === 'finder' && (
+        <SpeciesFinderTab altRecs={altRecs} speciesStats={speciesStatsForFinder} />
+      )}
+      {activeTab === 'list' && (
+        <SpeciesListTab species={species} isSuperadmin={isSuperadmin} />
       )}
     </div>
   )

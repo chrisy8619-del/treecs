@@ -4,13 +4,14 @@ import Image from 'next/image'
 import { CreateSpeciesDialog } from './create-species-dialog'
 import { SpeciesTabs } from './species-tabs'
 import type { SpeciesStat } from './species-stats-tab'
+import type { AltSpeciesRec, SpeciesStatForFinder } from './species-finder-tab'
 
 export default async function SpeciesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: species }, { data: groups }, { data: profile }, { data: plantingData }] =
+  const [{ data: species }, { data: groups }, { data: profile }, { data: plantingData }, { data: altRecsRaw }] =
     await Promise.all([
       supabase
         .from('species')
@@ -25,6 +26,9 @@ export default async function SpeciesPage() {
         .from('planting_records')
         .select('quantity_planted, expected_defect_qty, species(species_name_ko, species_groups(group_name))')
         .not('expected_defect_qty', 'is', null),
+      supabase
+        .from('alternative_species_recommendations')
+        .select('species_name, region, season, substitute1, substitute2, substitute3'),
     ])
 
   const isSuperadmin = profile?.role === 'superadmin'
@@ -56,6 +60,22 @@ export default async function SpeciesPage() {
       defectRate: v.totalDefectQty / v.totalQty,
     }))
 
+  const altRecs: AltSpeciesRec[] = (altRecsRaw ?? []).map((r) => ({
+    species_name: r.species_name,
+    region: r.region,
+    season: r.season,
+    substitute1: r.substitute1 ?? null,
+    substitute2: r.substitute2 ?? null,
+    substitute3: r.substitute3 ?? null,
+  }))
+
+  const speciesStatsForFinder: SpeciesStatForFinder[] = stats.map((s) => ({
+    speciesNameKo: s.speciesNameKo,
+    groupName: s.groupName,
+    totalQty: s.totalQty,
+    defectRate: s.defectRate,
+  }))
+
   return (
     <div className="space-y-0 -m-6">
       {/* 상단 헤더 */}
@@ -77,6 +97,8 @@ export default async function SpeciesPage() {
           species={species ?? []}
           stats={stats}
           isSuperadmin={isSuperadmin}
+          altRecs={altRecs}
+          speciesStatsForFinder={speciesStatsForFinder}
         />
       </div>
     </div>

@@ -41,10 +41,20 @@ export type SubstitutionMap = {
   improved_defect_rate: number
 }
 
+export type AltSpeciesRec = {
+  species_name: string
+  region: string
+  season: string
+  substitute1: string | null
+  substitute2: string | null
+  substitute3: string | null
+}
+
 type Props = {
   sites: SiteOption[]
   substitutions: SubstitutionMap[]
   speciesAvgRate: Record<string, number>  // 전체 데이터 기준 수종별 평균 하자율
+  altRecs: AltSpeciesRec[]  // 지역·계절 기반 대체 수종 추천 데이터
 }
 
 function riskConfig(rate: number | null) {
@@ -54,7 +64,7 @@ function riskConfig(rate: number | null) {
   return { label: '저위험', color: 'text-green-600', badge: 'bg-green-100 text-green-700', dot: 'bg-green-500' }
 }
 
-export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props) {
+export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs }: Props) {
   const subFileInputRef = useRef<HTMLInputElement>(null)
 
   const [selectedSiteId, setSelectedSiteId] = useState<string>(sites[0]?.id ?? '')
@@ -121,6 +131,48 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
     return map
   }, [substitutions])
 
+  // 지역·계절 기반 대체 수종 추천 맵 (현장 지역 + 식재 계절 매칭)
+  const altRecMap = useMemo(() => {
+    const currentSite = sites.find((s) => s.id === selectedSiteId)
+    if (!currentSite) return new Map<string, string[]>()
+
+    // 지역 권역 매핑: 엑셀 지역명과 현장 region 매핑
+    const siteRegionRaw = currentSite.region ?? ''
+    const matchedRegions: string[] = []
+    if (siteRegionRaw.includes('부산') || siteRegionRaw.includes('울산') || siteRegionRaw.includes('경남') || siteRegionRaw.includes('대구') || siteRegionRaw.includes('경북')) {
+      matchedRegions.push('부산', '울산', '경남', '대구', '경북')
+    } else if (siteRegionRaw.includes('광주') || siteRegionRaw.includes('전남') || siteRegionRaw.includes('전북')) {
+      matchedRegions.push('광주', '전남', '전북')
+    } else if (siteRegionRaw.includes('서울') || siteRegionRaw.includes('경기') || siteRegionRaw.includes('인천') || siteRegionRaw.includes('충남') || siteRegionRaw.includes('충북') || siteRegionRaw.includes('세종') || siteRegionRaw.includes('강원')) {
+      matchedRegions.push('서울', '경기', '인천', '충남', '충북', '세종', '강원')
+    } else {
+      // 매핑 불가 시 전체 사용
+      matchedRegions.push(...altRecs.map((r) => r.region))
+    }
+
+    // 현장 내 수종별 계절 (planting_season → 한국어 계절)
+    const seasonMap = new Map<string, string>()
+    for (const row of siteRows) {
+      if (!row.species_name || !row.planting_season) continue
+      const seasonKo: Record<string, string> = { spring: '봄', summer: '여름', fall: '가을', winter: '겨울' }
+      const ko = seasonKo[row.planting_season] ?? null
+      if (ko && !seasonMap.has(row.species_name)) seasonMap.set(row.species_name, ko)
+    }
+
+    const map = new Map<string, string[]>()
+    for (const rec of altRecs) {
+      if (!matchedRegions.includes(rec.region)) continue
+      const seasonForSpecies = seasonMap.get(rec.species_name)
+      // 계절 데이터가 있으면 계절 일치 여부 확인, 없으면 모두 포함
+      if (seasonForSpecies && rec.season !== seasonForSpecies) continue
+      const candidates = [rec.substitute1, rec.substitute2, rec.substitute3].filter((s): s is string => !!s && s !== rec.species_name)
+      const existing = map.get(rec.species_name) ?? []
+      const merged = [...new Set([...existing, ...candidates])]
+      map.set(rec.species_name, merged.slice(0, 3))
+    }
+    return map
+  }, [altRecs, sites, selectedSiteId, siteRows])
+
   // 수목하자율 기준 리스크 등급 헬퍼 (speciesAvgRate 값 → '고위험'|'중위험'|'저위험'|null)
   const getSpeciesRisk = useCallback((name: string | null): string | null => {
     if (!name) return null
@@ -135,13 +187,28 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
   const subMap = useMemo(() => {
     const map = new Map<string, { name: string; rate: number; isAuto?: boolean }[]>()
 
-    // DB 등록 데이터 우선 반영 (하자율 낮은 순 상위 3개)
+    // 1순위: DB 등록 데이터 (하자율 낮은 순 상위 3개)
     for (const [k, v] of dbSubMap) {
       const sorted = [...v].sort((a, b) => a.rate - b.rate).slice(0, 3)
       map.set(k, sorted.map((s) => ({ ...s, isAuto: false })))
     }
 
-    // 현장 내 저위험 수종 목록: 수목하자율 기준 저위험인 수종 (중복 제거, 낮은 순)
+    // 2순위: 지역·계절 기반 엑셀 데이터 (DB 등록 없는 수종에 적용)
+    for (const [speciesName, altCandidates] of altRecMap) {
+      if (map.has(speciesName) && map.get(speciesName)!.length > 0) continue
+      const candidates = altCandidates
+        .filter((name) => name !== speciesName)
+        .map((name) => ({
+          name,
+          rate: speciesAvgRate[name] ?? 0,
+          isAuto: true,
+        }))
+        .sort((a, b) => a.rate - b.rate)
+        .slice(0, 3)
+      if (candidates.length > 0) map.set(speciesName, candidates)
+    }
+
+    // 3순위: 현장 내 저위험 수종 자동 추천 (위에서도 없는 경우)
     const lowRiskSpecies = Array.from(
       new Map(
         siteRows
@@ -153,7 +220,6 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
       ).values()
     ).sort((a, b) => a.rate - b.rate)
 
-    // 고위험/중위험 수종(수목하자율 기준)에 DB 등록 없으면 자동 추천 상위 3개 추가
     for (const r of siteRows) {
       if (!r.species_name) continue
       const risk = getSpeciesRisk(r.species_name)
@@ -166,7 +232,7 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate }: Props
     }
 
     return map
-  }, [dbSubMap, siteRows, getSpeciesRisk, speciesAvgRate])
+  }, [dbSubMap, altRecMap, siteRows, getSpeciesRisk, speciesAvgRate])
 
   const tableRows = useMemo(() => {
     return siteRows.map((r) => {

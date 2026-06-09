@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { SimulationClient, type SiteOption, type SubstitutionMap } from './simulation-client'
+import { SimulationClient, type SiteOption, type SubstitutionMap, type AltSpeciesRec } from './simulation-client'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +9,7 @@ export default async function SimulationPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: sitesRaw }, { data: subsRaw }, { data: plantingAvgRaw }] = await Promise.all([
+  const [{ data: sitesRaw }, { data: subsRaw }, { data: plantingAvgRaw }, { data: altRecsRaw }] = await Promise.all([
     supabase
       .from('sites')
       .select('id, site_name, site_code, region, occupancy_date, organizations(name)')
@@ -28,6 +28,9 @@ export default async function SimulationPage() {
       .from('planting_records')
       .select('quantity_planted, expected_defect_qty, species ( species_name_ko )')
       .not('expected_defect_qty', 'is', null),
+    supabase
+      .from('alternative_species_recommendations')
+      .select('species_name, region, season, substitute1, substitute2, substitute3'),
   ])
 
   const sites: SiteOption[] = (sitesRaw ?? []).map((s) => {
@@ -70,5 +73,14 @@ export default async function SimulationPage() {
     speciesAvgRate[name] = v.qty > 0 ? v.defect / v.qty : 0
   }
 
-  return <SimulationClient sites={sites} substitutions={substitutions} speciesAvgRate={speciesAvgRate} />
+  const altRecs: AltSpeciesRec[] = (altRecsRaw ?? []).map((r) => ({
+    species_name: r.species_name,
+    region: r.region,
+    season: r.season,
+    substitute1: r.substitute1 ?? null,
+    substitute2: r.substitute2 ?? null,
+    substitute3: r.substitute3 ?? null,
+  }))
+
+  return <SimulationClient sites={sites} substitutions={substitutions} speciesAvgRate={speciesAvgRate} altRecs={altRecs} />
 }
