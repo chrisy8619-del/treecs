@@ -361,6 +361,7 @@ export default async function AnalyticsPage() {
   } = await getAnalyticsData()
 
   const hasData = siteData.length > 0 || yearlyData.length > 0 || hasPlantingAnalysis
+  const highRiskSpeciesCount = speciesData.filter((s) => s.defect_rate >= 0.20).length
 
   return (
     <div className="space-y-0 -m-6">
@@ -410,11 +411,11 @@ export default async function AnalyticsPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">고위험 현장</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">고위험 수종</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className={`text-2xl font-bold ${highRiskSites > 0 ? 'text-red-500' : ''}`}>
-                  {highRiskSites > 0 ? highRiskSites : '-'}
+                <p className={`text-2xl font-bold ${highRiskSpeciesCount > 0 ? 'text-red-500' : ''}`}>
+                  {highRiskSpeciesCount > 0 ? highRiskSpeciesCount.toLocaleString() : '-'}
                 </p>
                 <p className="text-xs text-muted-foreground">하자율 20% 이상</p>
               </CardContent>
