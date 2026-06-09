@@ -69,7 +69,7 @@ async function getAnalyticsData() {
   const currentYear = new Date().getFullYear()
   const yearlyData: { year: number; defect_rate: number; total_quantity: number; total_defect_quantity: number }[] =
     ((yearlyRes.data as YearlyRpcRow[] | null) ?? [])
-      .filter((d) => d.year >= 2023 && d.year <= currentYear)
+      .filter((d) => d.year >= 2022 && d.year <= currentYear)
       .sort((a, b) => a.year - b.year)
       .map((d) => ({
         year: d.year,

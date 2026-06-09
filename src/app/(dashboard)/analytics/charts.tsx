@@ -9,8 +9,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   ReferenceLine,
 } from 'recharts'
 
@@ -102,18 +100,23 @@ export function YearlyDefectChart({ data }: { data: YearData[] }) {
   const chartData = data.map((d) => ({
     year: `${d.year}년`,
     하자율: parseFloat((d.defect_rate * 100).toFixed(2)),
+    rate: d.defect_rate,
   }))
 
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+      <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis dataKey="year" tick={{ fontSize: 12 }} />
         <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} domain={[0, 'auto']} />
         <Tooltip content={<DefectRateTooltip />} />
         <ReferenceLine y={20} stroke="#ef4444" strokeDasharray="4 4" label={{ value: '기준 20%', position: 'right', fontSize: 10, fill: '#ef4444' }} />
-        <Line type="monotone" dataKey="하자율" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-      </LineChart>
+        <Bar dataKey="하자율" radius={[4, 4, 0, 0]}>
+          {chartData.map((entry, i) => (
+            <Cell key={i} fill={riskColor(entry.rate)} />
+          ))}
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   )
 }
