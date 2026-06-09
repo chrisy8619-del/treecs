@@ -376,28 +376,28 @@ export default async function AnalyticsPage() {
               </div>
             </div>
 
-            {/* 고위험 수종 */}
+            {/* 예상 하자 수량 */}
             <div className="bg-white rounded-2xl border border-[#E5E7EB] px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow">
               <div className="w-11 h-11 rounded-full bg-[#FEE2E2] flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5 text-[#EF4444]" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs text-[#6B7280] font-medium mb-0.5">고위험 수종</p>
+                <p className="text-xs text-[#6B7280] font-medium mb-0.5">예상 하자 수량</p>
                 <p className="text-2xl font-bold text-[#EF4444] leading-none">
-                  {riskHigh > 0 ? riskHigh : '-'}
-                  <span className="text-sm font-normal text-[#6B7280] ml-1">종</span>
+                  {totalPlantDefect > 0 ? totalPlantDefect.toLocaleString() : '-'}
+                  <span className="text-sm font-normal text-[#6B7280] ml-1">주</span>
                 </p>
-                <p className="text-xs text-[#9CA3AF] mt-1">하자율 20% 이상</p>
+                <p className="text-xs text-[#9CA3AF] mt-1">하자 수량 (점검 기준)</p>
               </div>
             </div>
 
-            {/* 예상 하자관리비용 */}
+            {/* 예상 하자 저감 비용 */}
             <div className="bg-white rounded-2xl border border-[#E5E7EB] px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow">
               <div className="w-11 h-11 rounded-full bg-[#ECFDF5] flex items-center justify-center shrink-0">
                 <Calculator className="w-5 h-5 text-[#166534]" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs text-[#6B7280] font-medium mb-0.5">예상 하자관리비용</p>
+                <p className="text-xs text-[#6B7280] font-medium mb-0.5">예상 하자 저감 비용</p>
                 <p className="text-xl font-bold text-[#D97706] leading-none truncate">
                   {totalReserveCost > 0 ? `₩${totalReserveCost.toLocaleString()}` : '-'}
                 </p>
