@@ -304,7 +304,13 @@ async function getAnalyticsData() {
     .sort((a, b) => b.reserve_cost - a.reserve_cost)
 
   // 요약 통계 — DB 집계 함수 기반 (row limit 우회)
-  const summary = plantingSummaryRes.data as { total_planted: number; total_defect: number; high_risk_sites: number } | null
+  const summary = plantingSummaryRes.data as {
+    total_planted: number
+    total_defect: number
+    high_risk_species: number
+    mid_risk_species: number
+    low_risk_species: number
+  } | null
   const totalPlanted = summary?.total_planted ?? plantings.reduce((s, p) => s + (p.quantity_planted ?? 0), 0)
   const totalPlantDefect = summary?.total_defect ?? plantings.reduce((s, p) => {
     const qty = p.quantity_planted ?? 0
@@ -312,38 +318,28 @@ async function getAnalyticsData() {
     return s + defect
   }, 0)
   const overallRate = totalPlanted > 0 ? totalPlantDefect / totalPlanted : null
-  const highRiskSites = summary?.high_risk_sites ?? (() => {
-    const plantSiteMap = new Map<string, { qty: number; defectQty: number }>()
-    for (const p of plantings) {
-      const sid = p.site_id as string
-      if (!sid) continue
-      const qty = p.quantity_planted ?? 0
-      const defect = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
-      const prev = plantSiteMap.get(sid) ?? { qty: 0, defectQty: 0 }
-      plantSiteMap.set(sid, { qty: prev.qty + qty, defectQty: prev.defectQty + defect })
-    }
-    return [...plantSiteMap.values()].filter((v) => v.qty > 0 && v.defectQty / v.qty >= 0.20).length
-  })()
 
   // 예비비 합계
   const totalReserveCost = siteReserveData.reduce((s, v) => s + v.reserve_cost, 0)
 
-  // 리스크 카운트 — risk_level 없으면 expected_defect_rate 기준 자동 보정
-  const riskCounts = plantings.reduce(
-    (acc, p) => {
-      const level = p.risk_level ?? (p.expected_defect_rate != null ? calcRiskLevel(p.expected_defect_rate) : null)
-      if (level === '고위험') acc.high++
-      else if (level === '중위험') acc.mid++
-      else if (level === '저위험') acc.low++
-      return acc
-    },
-    { high: 0, mid: 0, low: 0 }
-  )
+  // 리스크 카운트 — DB 집계 함수 우선, 없으면 1000행 기준 폴백
+  const riskCounts = summary
+    ? { high: summary.high_risk_species, mid: summary.mid_risk_species, low: summary.low_risk_species }
+    : plantings.reduce(
+        (acc, p) => {
+          const level = p.risk_level ?? (p.expected_defect_rate != null ? calcRiskLevel(p.expected_defect_rate) : null)
+          if (level === '고위험') acc.high++
+          else if (level === '중위험') acc.mid++
+          else if (level === '저위험') acc.low++
+          return acc
+        },
+        { high: 0, mid: 0, low: 0 }
+      )
 
   return {
     yearlyData, seasonData, contractorData, siteData, speciesData,
     siteReserveData, totalReserveCost, riskCounts, heatmapData,
-    totalPlanted, overallRate, highRiskSites,
+    totalPlanted, overallRate,
     hasPlantingAnalysis: plantings.length > 0,
   }
 }
@@ -356,7 +352,7 @@ export default async function AnalyticsPage() {
   const {
     yearlyData, seasonData, contractorData, siteData, speciesData,
     siteReserveData, totalReserveCost, riskCounts, heatmapData,
-    totalPlanted, overallRate, highRiskSites,
+    totalPlanted, overallRate,
     hasPlantingAnalysis,
   } = await getAnalyticsData()
 
