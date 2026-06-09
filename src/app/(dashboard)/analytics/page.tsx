@@ -371,7 +371,7 @@ export default async function AnalyticsPage() {
                 <p className={`text-2xl font-bold ${totalPlantDefect > 0 ? 'text-red-500' : ''}`}>
                   {totalPlantDefect > 0 ? totalPlantDefect.toLocaleString() : '-'}
                 </p>
-                <p className="text-xs text-muted-foreground">주</p>
+                <p className="text-xs text-muted-foreground">하자 수량 (점검 기준)</p>
               </CardContent>
             </Card>
             <Card>
@@ -383,7 +383,7 @@ export default async function AnalyticsPage() {
                   {totalReserveCost > 0 ? `₩${totalReserveCost.toLocaleString()}` : '-'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {totalReserveCost > 0 ? '원' : '예측 데이터 없음'}
+                  {totalReserveCost > 0 ? '조달청 단가 기준' : '예측 데이터 없음'}
                 </p>
               </CardContent>
             </Card>
