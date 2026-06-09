@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import { CreateSpeciesDialog } from './create-species-dialog'
 import { SpeciesTabs } from './species-tabs'
 import type { SpeciesStat } from './species-stats-tab'
@@ -56,20 +57,28 @@ export default async function SpeciesPage() {
     }))
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">수종 관리</h2>
-          <p className="text-muted-foreground">수목 수종 마스터 데이터를 관리합니다.</p>
+    <div className="space-y-0 -m-6">
+      {/* 상단 헤더 */}
+      <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+            <Image src="/logo.png" alt="TreeCS" width={32} height={32} className="object-contain" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">수종 관리</h1>
+            <p className="text-xs text-green-200 mt-0.5">수목 수종 마스터 데이터 및 리스크 현황을 관리합니다.</p>
+          </div>
         </div>
         <CreateSpeciesDialog groups={groups ?? []} />
       </div>
 
-      <SpeciesTabs
-        species={species ?? []}
-        stats={stats}
-        isSuperadmin={isSuperadmin}
-      />
+      <div className="px-6 py-5 space-y-6">
+        <SpeciesTabs
+          species={species ?? []}
+          stats={stats}
+          isSuperadmin={isSuperadmin}
+        />
+      </div>
     </div>
   )
 }
