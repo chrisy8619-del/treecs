@@ -74,8 +74,8 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <Link href="/analytics" className="w-full">
               <SidebarMenuButton size="lg">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
-                  <Image src="/logo.png" alt="TreeCS 로고" width={32} height={32} className="object-contain" />
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden bg-white">
+                  <Image src="/logo.png" alt="TreeCS 로고" width={32} height={32} className="object-cover w-full h-full" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">TreeCS</span>
