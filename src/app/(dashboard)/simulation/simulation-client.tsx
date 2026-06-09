@@ -1006,30 +1006,41 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                       <td className={`px-3 py-2 text-right font-medium text-gray-700`}>{originalRatePct}</td>
                       <td className={`px-3 py-2 text-right font-medium ${risk.color}`}>{speciesAvgRatePct}</td>
                       <td className="px-3 py-2">
-                        {row.expected_defect_rate != null ? (
+                        {speciesAvgRateVal != null ? (
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${risk.badge}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${risk.dot}`} />
                             {risk.label}
                           </span>
+                        ) : row.expected_defect_rate != null ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${riskConfig(row.expected_defect_rate).badge}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${riskConfig(row.expected_defect_rate).dot}`} />
+                            {riskConfig(row.expected_defect_rate).label}
+                          </span>
                         ) : <span className="text-gray-300">-</span>}
                       </td>
                       <td className="px-3 py-2">
-                        {isHighRisk && hasSubOptions ? (
-                          <div className="relative">
-                            <select
-                              value={row.selectedSubstituteName ?? ''}
-                              onChange={(e) => setSelectedSubstitutes((prev) => ({ ...prev, [row.speciesName]: e.target.value }))}
-                              className="text-xs border border-dashed border-gray-400 rounded px-2 py-1 pr-6 appearance-none bg-white focus:outline-none focus:border-green-500 min-w-[120px]"
-                            >
-                              <option value="">대체 수종 선택</option>
-                              {row.substituteOptions.map((opt) => (
-                                <option key={opt.name} value={opt.name}>
-                                  {opt.isAuto ? '▷ ' : ''}{opt.name} ({(opt.rate * 100).toFixed(1)}%){opt.isAuto ? ' *추천' : ''}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-                          </div>
+                        {isHighRisk ? (
+                          hasSubOptions ? (
+                            <div className="relative">
+                              <select
+                                value={row.selectedSubstituteName ?? ''}
+                                onChange={(e) => setSelectedSubstitutes((prev) => ({ ...prev, [row.speciesName]: e.target.value }))}
+                                className="text-xs border border-dashed border-red-400 rounded px-2 py-1 pr-6 appearance-none bg-white focus:outline-none focus:border-red-500 min-w-[130px]"
+                              >
+                                <option value="">{row.speciesName} 대체 수종 선택</option>
+                                {row.substituteOptions.map((opt) => (
+                                  <option key={opt.name} value={opt.name}>
+                                    {opt.isAuto ? '▷ ' : ''}{opt.name} ({(opt.rate * 100).toFixed(1)}%){opt.isAuto ? ' *추천' : ''}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                            </div>
+                          ) : (
+                            <span className="text-xs text-red-400 px-2 py-1 bg-red-50 rounded border border-red-200">
+                              대체 수종 미등록
+                            </span>
+                          )
                         ) : (
                           <span className="text-xs text-gray-400 px-2 py-1 bg-gray-100 rounded">
                             유지 관리

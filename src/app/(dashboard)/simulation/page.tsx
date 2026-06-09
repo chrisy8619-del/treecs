@@ -33,7 +33,7 @@ export default async function SimulationPage() {
       .select('species_name, region, season, substitute1, substitute2, substitute3'),
   ])
 
-  const sites: SiteOption[] = (sitesRaw ?? []).map((s) => {
+  const sitesAll: SiteOption[] = (sitesRaw ?? []).map((s) => {
     const org = Array.isArray(s.organizations) ? s.organizations[0] : s.organizations
     return {
       id: s.id,
@@ -44,6 +44,11 @@ export default async function SimulationPage() {
       org_name: (org as { name: string } | null)?.name ?? null,
     }
   })
+  // 만촌자이르네 현장을 맨 앞으로 정렬
+  const manChonIdx = sitesAll.findIndex((s) => s.site_name.includes('만촌'))
+  const sites: SiteOption[] = manChonIdx > 0
+    ? [sitesAll[manChonIdx], ...sitesAll.filter((_, i) => i !== manChonIdx)]
+    : sitesAll
 
   const substitutions: SubstitutionMap[] = (subsRaw ?? []).map((s) => {
     const original = Array.isArray(s.original) ? s.original[0] : s.original
