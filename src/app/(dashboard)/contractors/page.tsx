@@ -62,7 +62,7 @@ export default async function ContractorsPage() {
   return (
     <div className="space-y-0 -m-6">
       {/* 상단 헤더 */}
-      <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
+      <div className="bg-[#14532D] text-white px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
             <Image src="/logo.png" alt="TreeCS" width={32} height={32} className="object-contain" />
@@ -75,7 +75,7 @@ export default async function ContractorsPage() {
         <CreateContractorDialog organizations={organizations ?? []} />
       </div>
 
-      <div className="px-6 py-5 space-y-6">
+      <div className="px-6 py-6 space-y-6 bg-[#F8FAF9] min-h-screen">
         <ContractorTabs
           contractors={contractors ?? []}
           stats={stats}
