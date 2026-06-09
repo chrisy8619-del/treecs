@@ -55,6 +55,7 @@ type Props = {
   substitutions: SubstitutionMap[]
   speciesAvgRate: Record<string, number>  // 전체 데이터 기준 수종별 평균 하자율
   altRecs: AltSpeciesRec[]  // 지역·계절 기반 대체 수종 추천 데이터
+  hideHeader?: boolean
 }
 
 function riskConfig(rate: number | null) {
@@ -64,7 +65,7 @@ function riskConfig(rate: number | null) {
   return { label: '저위험', color: 'text-green-600', badge: 'bg-green-100 text-green-700', dot: 'bg-green-500' }
 }
 
-export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs }: Props) {
+export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs, hideHeader }: Props) {
   const subFileInputRef = useRef<HTMLInputElement>(null)
 
   const [selectedSiteId, setSelectedSiteId] = useState<string>(
@@ -621,7 +622,8 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
   }
 
   return (
-    <div className="space-y-0 -m-6">
+    <div className={hideHeader ? '' : 'space-y-0 -m-6'}>
+      {!hideHeader && (
       <div className="bg-[#1a3a2a] text-white px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
@@ -650,6 +652,7 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
           <input ref={subFileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleSubFileChange} />
         </div>
       </div>
+      )}
 
       <div className="px-6 py-5 space-y-4">
         {uploadStatus && (

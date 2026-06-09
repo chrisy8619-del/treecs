@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   TreePine,
-  BarChart3,
   Building2,
   Users,
   Settings,
@@ -31,7 +30,6 @@ import { logout } from '@/app/actions/auth'
 
 const navMain = [
   { title: '대시보드', href: '/simulation', icon: LayoutDashboard },
-  { title: '분석', href: '/analytics', icon: BarChart3 },
   { title: '수종 관리', href: '/species', icon: Leaf },
   { title: '협력사 관리', href: '/contractors', icon: Users },
 ]
