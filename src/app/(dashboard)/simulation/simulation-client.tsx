@@ -621,6 +621,47 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
     XLSX.writeFile(wb, '대체수종매핑_양식.xlsx')
   }
 
+  // 고위험 대체 수종 일괄 적용
+  function handleBulkApply() {
+    const bulk: Record<string, string> = {}
+    for (const row of tableRows) {
+      const speciesAvgRateVal = row.speciesName && speciesAvgRate[row.speciesName] != null
+        ? speciesAvgRate[row.speciesName] : null
+      const isHighRisk = speciesAvgRateVal != null && speciesAvgRateVal >= 0.20
+      if (!isHighRisk) continue
+      if (row.substituteOptions.length === 0) continue
+      if (!selectedSubstitutes[row.speciesName]) {
+        bulk[row.speciesName] = row.substituteOptions[0].name
+      }
+    }
+    if (Object.keys(bulk).length > 0) {
+      setSelectedSubstitutes((prev) => ({ ...prev, ...bulk }))
+    }
+  }
+
+  const actionButtons = (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={generateAiAnalysis}
+        disabled={aiGenerating || siteRows.length === 0}
+        className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        <Sparkles className={`h-3.5 w-3.5 ${aiGenerating ? 'animate-spin' : ''}`} />
+        {aiGenerating ? '분석 중...' : 'AI 분석 생성'}
+      </button>
+      <button onClick={handleExportTemplate} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors">
+        <Upload className="h-3.5 w-3.5" />파일 내보내기
+      </button>
+      <button onClick={() => window.location.reload()} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors">
+        <RefreshCw className="h-3.5 w-3.5" />새로고침
+      </button>
+      <button onClick={() => subFileInputRef.current?.click()} disabled={isUploading}
+        className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors disabled:opacity-50">
+        <Settings className="h-3.5 w-3.5" />{isUploading ? '업로드 중...' : '대체수종 등록'}
+      </button>
+      <input ref={subFileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleSubFileChange} />
+    </div>
+  )
+
   return (
     <div className={hideHeader ? '' : 'space-y-0 -m-6'}>
       {!hideHeader && (
@@ -631,26 +672,12 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
           </div>
           <h1 className="text-xl font-bold tracking-tight">조경 AI플랫폼 대시보드</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={generateAiAnalysis}
-            disabled={aiGenerating || siteRows.length === 0}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            <Sparkles className={`h-3.5 w-3.5 ${aiGenerating ? 'animate-spin' : ''}`} />
-            {aiGenerating ? '분석 중...' : 'AI 분석 생성'}
-          </button>
-          <button onClick={handleExportTemplate} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors">
-            <Upload className="h-3.5 w-3.5" />파일 내보내기
-          </button>
-          <button onClick={() => window.location.reload()} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors">
-            <RefreshCw className="h-3.5 w-3.5" />새로고침
-          </button>
-          <button onClick={() => subFileInputRef.current?.click()} disabled={isUploading}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded border border-white/20 transition-colors disabled:opacity-50">
-            <Settings className="h-3.5 w-3.5" />{isUploading ? '업로드 중...' : '대체수종 등록'}
-          </button>
-          <input ref={subFileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleSubFileChange} />
-        </div>
+        {actionButtons}
+      </div>
+      )}
+      {hideHeader && (
+      <div className="bg-[#1a3a2a] text-white px-6 py-2.5 flex items-center justify-end">
+        {actionButtons}
       </div>
       )}
 
@@ -968,13 +995,24 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
               <span className="text-sm font-semibold text-gray-700">수종별 하자율 저감 시뮬레이션</span>
               <span className="text-xs text-gray-400">{loadingRows ? '데이터 불러오는 중...' : `총 ${tableRows.length}종`}</span>
             </div>
-            <div className="flex items-center gap-3 text-xs">
-              {[{ dot: 'bg-red-500', label: '고위험' }, { dot: 'bg-orange-400', label: '중위험' }, { dot: 'bg-green-500', label: '저위험' }, { dot: 'bg-gray-300', label: '유지 관리' }].map((item) => (
-                <div key={item.label} className="flex items-center gap-1">
-                  <span className={`inline-block w-2 h-2 rounded-full ${item.dot}`} />
-                  <span className="text-gray-500">{item.label}</span>
-                </div>
-              ))}
+            <div className="flex items-center gap-3">
+              {tableRows.length > 0 && (
+                <button
+                  onClick={handleBulkApply}
+                  className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded transition-colors font-medium"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  고위험 대체 수종 일괄 적용
+                </button>
+              )}
+              <div className="flex items-center gap-3 text-xs">
+                {[{ dot: 'bg-red-500', label: '고위험' }, { dot: 'bg-orange-400', label: '중위험' }, { dot: 'bg-green-500', label: '저위험' }, { dot: 'bg-gray-300', label: '유지 관리' }].map((item) => (
+                  <div key={item.label} className="flex items-center gap-1">
+                    <span className={`inline-block w-2 h-2 rounded-full ${item.dot}`} />
+                    <span className="text-gray-500">{item.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
