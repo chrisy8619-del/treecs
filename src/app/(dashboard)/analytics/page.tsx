@@ -465,7 +465,7 @@ export default async function AnalyticsPage() {
               <CardHeader>
                 <CardTitle className="text-base">
                   계절별 하자율
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">식재시기 기준</span>
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">입주시기 기준</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -525,7 +525,7 @@ export default async function AnalyticsPage() {
                 <CardTitle className="text-base">
                   수종별 계절 하자율 히트맵
                   <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    식재시기 기준 · 상위 {heatmapData.length}종
+                    입주시기 기준 · 상위 {heatmapData.length}종
                   </span>
                 </CardTitle>
               </CardHeader>
