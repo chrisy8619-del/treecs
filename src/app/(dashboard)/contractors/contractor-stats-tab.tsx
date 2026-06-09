@@ -241,13 +241,18 @@ export function ContractorStatsTab({ stats, year }: Props) {
                 const barWidth = maxRate > 0 ? (item.defectRate / maxRate) * 100 : 0
                 const color = riskColor(item.defectRate)
                 const shortName = item.name.length > 10 ? item.name.slice(0, 10) + '…' : item.name
+                const labelInside = barWidth >= 22
                 return (
                   <div key={item.id} className="flex items-center gap-3">
                     <span className="w-5 text-right text-xs font-semibold text-[#9CA3AF] shrink-0">{i + 1}</span>
                     <span className="w-24 text-sm font-medium text-[#111827] truncate shrink-0" title={item.name}>{shortName}</span>
                     <div className="flex-1 relative h-6 flex items-center">
-                      <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${barWidth}%`, backgroundColor: color, opacity: 0.85 }} />
-                      <span className="relative ml-2 text-xs font-bold" style={{ color }}>{pct.toFixed(1)}%</span>
+                      <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${barWidth}%`, backgroundColor: color }} />
+                      {labelInside ? (
+                        <span className="absolute left-0 w-full h-full flex items-center pl-2 text-xs font-bold text-white">{pct.toFixed(1)}%</span>
+                      ) : (
+                        <span className="relative text-xs font-bold" style={{ marginLeft: `calc(${barWidth}% + 4px)`, color }}>{pct.toFixed(1)}%</span>
+                      )}
                     </div>
                     <span className="w-14 text-right text-xs text-[#6B7280] shrink-0">{item.siteCount}개소</span>
                   </div>
