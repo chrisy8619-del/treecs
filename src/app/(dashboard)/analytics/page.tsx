@@ -26,10 +26,7 @@ async function getAnalyticsData() {
   const supabase = await createClient()
 
   const [yearlyRes, itemsRes, contractorRes, plantingRes, plantingSummaryRes] = await Promise.all([
-    supabase
-      .from('agg_metrics_by_year')
-      .select('year, total_quantity, total_defect_quantity, defect_rate')
-      .order('year'),
+    supabase.rpc('get_yearly_defect'),
     supabase
       .from('inspection_items')
       .select(`
@@ -67,34 +64,19 @@ async function getAnalyticsData() {
   const items = itemsRes.data ?? []
   const plantings = plantingRes.data ?? []
 
-  // 연도별 — 집계 테이블 우선, 없으면 planting_records 기반으로 집계
-  let yearlyData: { year: number; defect_rate: number; total_quantity: number; total_defect_quantity: number }[] = []
-  if (yearlyRes.data && yearlyRes.data.length > 0) {
-    yearlyData = yearlyRes.data.map((d) => ({
-      year: d.year,
-      defect_rate: d.defect_rate ?? 0,
-      total_quantity: d.total_quantity,
-      total_defect_quantity: d.total_defect_quantity,
-    }))
-  } else if (plantings.length > 0) {
-    const yMap = new Map<number, { qty: number; defectQty: number }>()
-    for (const p of plantings) {
-      if (!p.planting_date) continue
-      const year = new Date(p.planting_date).getFullYear()
-      const qty = p.quantity_planted ?? 0
-      const defectQty = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
-      const prev = yMap.get(year) ?? { qty: 0, defectQty: 0 }
-      yMap.set(year, { qty: prev.qty + qty, defectQty: prev.defectQty + defectQty })
-    }
-    yearlyData = [...yMap.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([year, v]) => ({
-        year,
-        defect_rate: v.qty > 0 ? v.defectQty / v.qty : 0,
-        total_quantity: v.qty,
-        total_defect_quantity: v.defectQty,
+  // 연도별 — RPC 집계 기반 (row limit 우회), 2023년부터 현재까지 표시
+  type YearlyRpcRow = { year: number; total_quantity: number; total_defect_quantity: number; defect_rate: number }
+  const currentYear = new Date().getFullYear()
+  const yearlyData: { year: number; defect_rate: number; total_quantity: number; total_defect_quantity: number }[] =
+    ((yearlyRes.data as YearlyRpcRow[] | null) ?? [])
+      .filter((d) => d.year >= 2023 && d.year <= currentYear)
+      .sort((a, b) => a.year - b.year)
+      .map((d) => ({
+        year: d.year,
+        defect_rate: d.defect_rate ?? 0,
+        total_quantity: d.total_quantity,
+        total_defect_quantity: d.total_defect_quantity,
       }))
-  }
 
   // 계절별 — 점검 회차 season_code 우선, 없으면 식재기록 기반
   const seasonMap = new Map<string, { qty: number; defectQty: number }>()
