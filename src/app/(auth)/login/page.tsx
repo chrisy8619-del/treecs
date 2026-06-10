@@ -5,7 +5,8 @@ import { login } from '@/app/actions/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
+import { Logo } from '@/components/ui/logo'
 import Link from 'next/link'
 
 export default function LoginPage() {
@@ -14,9 +15,11 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/40">
       <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">TreeCS</CardTitle>
-          <CardDescription>조경 수목 하자율 분석 시스템</CardDescription>
+        <CardHeader className="items-center text-center pb-2">
+          <Logo size={56} showText showSubTitle={false} className="mb-1" />
+          <CardDescription className="text-sm text-muted-foreground">
+            조경 수목 하자율 분석 시스템
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">

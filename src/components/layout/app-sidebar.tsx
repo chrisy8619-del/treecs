@@ -2,8 +2,8 @@
 
 import React from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { Logo } from '@/components/ui/logo'
 import {
   LayoutDashboard,
   TreePine,
@@ -69,22 +69,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <Link href="/analytics" className="w-full">
-              <SidebarMenuButton size="lg">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-full overflow-hidden bg-white">
-                  <Image src="/logo.png" alt="TreeCS 로고" width={32} height={32} className="object-cover w-full h-full" />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">TreeCS</span>
-                  <span className="text-xs text-muted-foreground">수목 관리 플랫폼</span>
-                </div>
-              </SidebarMenuButton>
-            </Link>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarHeader className="p-3">
+        <Link href="/analytics" className="w-full">
+          <Logo size={36} showText showSubTitle />
+        </Link>
       </SidebarHeader>
 
       <SidebarContent>
