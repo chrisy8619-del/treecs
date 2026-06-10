@@ -51,29 +51,38 @@ export default async function SettingsPage() {
   }
 
   const pendingUserCount = users.filter((u) => u.status === 'pending').length
-  let pendingSites: PendingSite[] = []
+
+  // pendingSites 조립: planting_records 카운트 없이 0으로 처리
+  const pendingSites: PendingSite[] = rawPendingSites.map((s) => ({
+    id: s.id,
+    site_name: s.site_name,
+    site_code: s.site_code,
+    region: s.region ?? null,
+    occupancy_date: s.occupancy_date ?? null,
+    start_date: s.start_date ?? null,
+    created_at: s.created_at,
+    planting_count: 0,
+  }))
+
+  // planting_records 카운트 조회 (실패해도 무시)
   if (rawPendingSites.length > 0) {
     const siteIds = rawPendingSites.map((s) => s.id)
-    const { data: plantingCounts } = await supabase
+    const { data: plantingCountsData } = await supabase
       .from('planting_records')
       .select('site_id')
       .in('site_id', siteIds)
 
-    const countMap = new Map<string, number>()
-    for (const p of plantingCounts ?? []) {
-      countMap.set(p.site_id, (countMap.get(p.site_id) ?? 0) + 1)
+    if (plantingCountsData) {
+      const countMap = new Map<string, number>()
+      for (const p of plantingCountsData) {
+        if (p.site_id) {
+          countMap.set(p.site_id, (countMap.get(p.site_id) ?? 0) + 1)
+        }
+      }
+      for (const site of pendingSites) {
+        site.planting_count = countMap.get(site.id) ?? 0
+      }
     }
-
-    pendingSites = rawPendingSites.map((s) => ({
-      id: s.id,
-      site_name: s.site_name,
-      site_code: s.site_code,
-      region: s.region ?? null,
-      occupancy_date: s.occupancy_date ?? null,
-      start_date: s.start_date ?? null,
-      created_at: s.created_at,
-      planting_count: countMap.get(s.id) ?? 0,
-    }))
   }
 
   return (

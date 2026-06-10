@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { approveUser, deactivateUser, changeUserRole } from '@/app/actions/settings'
 import {
   Table,
   TableBody,
@@ -40,6 +39,17 @@ const statusVariant: Record<string, 'default' | 'secondary' | 'outline' | 'destr
   active: 'default',
   pending: 'secondary',
   inactive: 'outline',
+}
+
+async function callUserManagement(body: { action: string; userId: string; role?: string }): Promise<{ error?: string }> {
+  const res = await fetch('/api/user-management', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json()
+  if (!res.ok) return { error: data.error ?? '요청 실패' }
+  return {}
 }
 
 export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]; myRole: string }) {
@@ -113,7 +123,7 @@ export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]
                           const val = e.target.value
                           setIsPending(true)
                           try {
-                            const res = await changeUserRole(u.id, val)
+                            const res = await callUserManagement({ action: 'changeRole', userId: u.id, role: val })
                             if (res.error) toast.error(res.error)
                             else {
                               updateUser(u.id, { role: val })
@@ -149,7 +159,7 @@ export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]
                           onClick={async () => {
                             setIsPending(true)
                             try {
-                              const res = await approveUser(u.id)
+                              const res = await callUserManagement({ action: 'approve', userId: u.id })
                               if (res.error) toast.error(res.error)
                               else {
                                 updateUser(u.id, { status: 'active' })
@@ -169,7 +179,7 @@ export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]
                           onClick={async () => {
                             setIsPending(true)
                             try {
-                              const res = await deactivateUser(u.id)
+                              const res = await callUserManagement({ action: 'deactivate', userId: u.id })
                               if (res.error) toast.error(res.error)
                               else {
                                 updateUser(u.id, { status: 'inactive' })
@@ -189,7 +199,7 @@ export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]
                           onClick={async () => {
                             setIsPending(true)
                             try {
-                              const res = await approveUser(u.id)
+                              const res = await callUserManagement({ action: 'reactivate', userId: u.id })
                               if (res.error) toast.error(res.error)
                               else {
                                 updateUser(u.id, { status: 'active' })

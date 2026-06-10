@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { approveSite, rejectSite } from '@/app/actions/settings'
 import {
   Table,
   TableBody,
@@ -26,6 +25,17 @@ export type PendingSite = {
   planting_count: number
 }
 
+async function callSiteManagement(body: { action: string; siteId: string }): Promise<{ error?: string }> {
+  const res = await fetch('/api/site-management', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json()
+  if (!res.ok) return { error: data.error ?? '요청 실패' }
+  return {}
+}
+
 export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
   const [isPending, setIsPending] = useState(false)
   const [localSites, setLocalSites] = useState<PendingSite[]>(sites)
@@ -33,7 +43,7 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
   async function handleApprove(siteId: string, siteName: string) {
     setIsPending(true)
     try {
-      const res = await approveSite(siteId)
+      const res = await callSiteManagement({ action: 'approve', siteId })
       if (res.error) {
         toast.error(res.error)
       } else {
@@ -47,7 +57,7 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
     if (!confirm(`'${siteName}' 현장을 반려하시겠습니까?\n업로드된 수목 데이터도 함께 삭제됩니다.`)) return
     setIsPending(true)
     try {
-      const res = await rejectSite(siteId)
+      const res = await callSiteManagement({ action: 'reject', siteId })
       if (res.error) {
         toast.error(res.error)
       } else {
