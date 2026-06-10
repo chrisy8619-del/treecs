@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { approveUser, deactivateUser, changeUserRole } from '@/app/actions/settings'
@@ -45,7 +45,7 @@ const statusVariant: Record<string, 'default' | 'secondary' | 'outline' | 'destr
 
 export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: string }) {
   const [tab, setTab] = useState<'all' | 'pending'>('all')
-  const [isPending, startTransition] = useTransition()
+  const [isPending, setIsPending] = useState(false)
   const router = useRouter()
 
   const pendingUsers = users.filter((u) => u.status === 'pending')
@@ -106,13 +106,14 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                       <select
                         defaultValue={u.role}
                         disabled={isPending}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const val = e.target.value
-                          startTransition(async () => {
+                          setIsPending(true)
+                          try {
                             const res = await changeUserRole(u.id, val)
                             if (res.error) toast.error(res.error)
                             else { toast.success('권한이 변경되었습니다.'); router.refresh() }
-                          })
+                          } finally { setIsPending(false) }
                         }}
                         className="h-7 rounded-md border border-input bg-transparent px-2 text-xs outline-none"
                       >
@@ -139,11 +140,14 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           size="sm"
                           variant="default"
                           disabled={isPending}
-                          onClick={() => startTransition(async () => {
-                            const res = await approveUser(u.id)
-                            if (res.error) toast.error(res.error)
-                            else { toast.success('승인되었습니다.'); router.refresh() }
-                          })}
+                          onClick={async () => {
+                            setIsPending(true)
+                            try {
+                              const res = await approveUser(u.id)
+                              if (res.error) toast.error(res.error)
+                              else { toast.success('승인되었습니다.'); router.refresh() }
+                            } finally { setIsPending(false) }
+                          }}
                         >
                           승인
                         </Button>
@@ -153,11 +157,14 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           size="sm"
                           variant="outline"
                           disabled={isPending}
-                          onClick={() => startTransition(async () => {
-                            const res = await deactivateUser(u.id)
-                            if (res.error) toast.error(res.error)
-                            else { toast.success('비활성화되었습니다.'); router.refresh() }
-                          })}
+                          onClick={async () => {
+                            setIsPending(true)
+                            try {
+                              const res = await deactivateUser(u.id)
+                              if (res.error) toast.error(res.error)
+                              else { toast.success('비활성화되었습니다.'); router.refresh() }
+                            } finally { setIsPending(false) }
+                          }}
                         >
                           비활성화
                         </Button>
@@ -167,11 +174,14 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           size="sm"
                           variant="outline"
                           disabled={isPending}
-                          onClick={() => startTransition(async () => {
-                            const res = await approveUser(u.id)
-                            if (res.error) toast.error(res.error)
-                            else { toast.success('재활성화되었습니다.'); router.refresh() }
-                          })}
+                          onClick={async () => {
+                            setIsPending(true)
+                            try {
+                              const res = await approveUser(u.id)
+                              if (res.error) toast.error(res.error)
+                              else { toast.success('재활성화되었습니다.'); router.refresh() }
+                            } finally { setIsPending(false) }
+                          }}
                         >
                           재활성화
                         </Button>

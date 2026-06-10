@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { approveSite, rejectSite } from '@/app/actions/settings'
@@ -28,12 +28,13 @@ export type PendingSite = {
 }
 
 export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
-  const [isPending, startTransition] = useTransition()
+  const [isPending, setIsPending] = useState(false)
   const [localSites, setLocalSites] = useState<PendingSite[]>(sites)
   const router = useRouter()
 
-  function handleApprove(siteId: string, siteName: string) {
-    startTransition(async () => {
+  async function handleApprove(siteId: string, siteName: string) {
+    setIsPending(true)
+    try {
       const res = await approveSite(siteId)
       if (res.error) {
         toast.error(res.error)
@@ -42,12 +43,13 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
         setLocalSites((prev) => prev.filter((s) => s.id !== siteId))
         router.refresh()
       }
-    })
+    } finally { setIsPending(false) }
   }
 
-  function handleReject(siteId: string, siteName: string) {
+  async function handleReject(siteId: string, siteName: string) {
     if (!confirm(`'${siteName}' 현장을 반려하시겠습니까?\n업로드된 수목 데이터도 함께 삭제됩니다.`)) return
-    startTransition(async () => {
+    setIsPending(true)
+    try {
       const res = await rejectSite(siteId)
       if (res.error) {
         toast.error(res.error)
@@ -56,7 +58,7 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
         setLocalSites((prev) => prev.filter((s) => s.id !== siteId))
         router.refresh()
       }
-    })
+    } finally { setIsPending(false) }
   }
 
   return (
