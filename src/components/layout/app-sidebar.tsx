@@ -74,7 +74,7 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <Link href="/analytics" className="w-full">
               <SidebarMenuButton size="lg">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden bg-white">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-full overflow-hidden bg-white">
                   <Image src="/logo.png" alt="TreeCS 로고" width={32} height={32} className="object-cover w-full h-full" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
@@ -114,11 +114,13 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <form action={logout}>
-              <SidebarMenuButton tooltip="로그아웃" render={<button type="submit" />}>
-                <LogOut />
-                <span>로그아웃</span>
-              </SidebarMenuButton>
+            <form action={logout} className="w-full">
+              <button type="submit" className="w-full">
+                <SidebarMenuButton tooltip="로그아웃">
+                  <LogOut />
+                  <span>로그아웃</span>
+                </SidebarMenuButton>
+              </button>
             </form>
           </SidebarMenuItem>
         </SidebarMenu>

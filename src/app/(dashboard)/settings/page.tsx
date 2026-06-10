@@ -24,35 +24,33 @@ export default async function SettingsPage() {
 
   const isAdmin = ['admin', 'superadmin'].includes(safeProfile.role)
 
-  const [usersResult, logsResult, pendingSitesResult] = await Promise.all([
-    isAdmin
-      ? supabase
-          .from('profiles')
-          .select('id, name, email, department, role, status, created_at')
-          .order('created_at', { ascending: false })
-      : Promise.resolve({ data: [] }),
-    isAdmin
-      ? supabase
-          .from('upload_logs')
-          .select('id, file_name, upload_type, row_count, status, created_at')
-          .order('created_at', { ascending: false })
-          .limit(50)
-      : Promise.resolve({ data: [] }),
-    isAdmin
-      ? supabase
-          .from('sites')
-          .select('id, site_name, site_code, region, occupancy_date, start_date, created_at')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false })
-      : Promise.resolve({ data: [] }),
-  ])
+  let users: { id: string; name: string | null; email: string; department: string | null; role: string; status: string; created_at: string }[] = []
+  let uploadLogs: { id: string; file_name: string; upload_type: string | null; row_count: number | null; status: string; created_at: string }[] = []
+  let rawPendingSites: { id: string; site_name: string; site_code: string; region: string | null; occupancy_date: string | null; start_date: string | null; created_at: string }[] = []
 
-  const users = usersResult.data ?? []
-  const uploadLogs = logsResult.data ?? []
+  if (isAdmin) {
+    const [usersResult, logsResult, pendingSitesResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, name, email, department, role, status, created_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('upload_logs')
+        .select('id, file_name, upload_type, row_count, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('sites')
+        .select('id, site_name, site_code, region, occupancy_date, start_date, created_at')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false }),
+    ])
+    users = usersResult.data ?? []
+    uploadLogs = logsResult.data ?? []
+    rawPendingSites = pendingSitesResult.data ?? []
+  }
+
   const pendingUserCount = users.filter((u) => u.status === 'pending').length
-
-  // 현장별 planting_records 수 집계
-  const rawPendingSites = pendingSitesResult.data ?? []
   let pendingSites: PendingSite[] = []
   if (rawPendingSites.length > 0) {
     const siteIds = rawPendingSites.map((s) => s.id)
