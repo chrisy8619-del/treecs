@@ -30,7 +30,6 @@ export async function updateProfile(
 
   if (error) return { error: `저장 실패: ${error.message}`, success: false }
 
-  revalidatePath('/settings')
   return { error: '', success: true, message: '프로필이 저장되었습니다.' }
 }
 
@@ -69,7 +68,6 @@ export async function approveUser(userId: string): Promise<{ error?: string }> {
   const { error } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId)
   if (error) return { error: `승인 실패: ${error.message}` }
 
-  revalidatePath('/settings')
   return {}
 }
 
@@ -84,7 +82,6 @@ export async function deactivateUser(userId: string): Promise<{ error?: string }
   const { error } = await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId)
   if (error) return { error: `비활성화 실패: ${error.message}` }
 
-  revalidatePath('/settings')
   return {}
 }
 
@@ -99,7 +96,6 @@ export async function changeUserRole(userId: string, role: string): Promise<{ er
   const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
   if (error) return { error: `권한 변경 실패: ${error.message}` }
 
-  revalidatePath('/settings')
   return {}
 }
 
@@ -114,9 +110,6 @@ export async function approveSite(siteId: string): Promise<{ error?: string }> {
   const { error } = await supabase.from('sites').update({ status: 'active' }).eq('id', siteId)
   if (error) return { error: `승인 실패: ${error.message}` }
 
-  revalidatePath('/settings')
-  revalidatePath('/dashboard')
-  revalidatePath('/sites')
   return {}
 }
 
@@ -133,9 +126,6 @@ export async function rejectSite(siteId: string): Promise<{ error?: string }> {
   const { error } = await supabase.from('sites').delete().eq('id', siteId)
   if (error) return { error: `반려 실패: ${error.message}` }
 
-  revalidatePath('/settings')
-  revalidatePath('/dashboard')
-  revalidatePath('/sites')
   return {}
 }
 
@@ -154,5 +144,4 @@ export async function saveUploadLog(log: {
     uploaded_by: user.id,
     ...log,
   })
-  revalidatePath('/settings')
 }

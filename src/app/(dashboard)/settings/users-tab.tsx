@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { approveUser, deactivateUser, changeUserRole } from '@/app/actions/settings'
 import {
@@ -45,6 +46,7 @@ const statusVariant: Record<string, 'default' | 'secondary' | 'outline' | 'destr
 export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: string }) {
   const [tab, setTab] = useState<'all' | 'pending'>('all')
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
   const pendingUsers = users.filter((u) => u.status === 'pending')
   const displayed = tab === 'pending' ? pendingUsers : users
@@ -109,7 +111,7 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           startTransition(async () => {
                             const res = await changeUserRole(u.id, val)
                             if (res.error) toast.error(res.error)
-                            else toast.success('권한이 변경되었습니다.')
+                            else { toast.success('권한이 변경되었습니다.'); router.refresh() }
                           })
                         }}
                         className="h-7 rounded-md border border-input bg-transparent px-2 text-xs outline-none"
@@ -140,7 +142,7 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           onClick={() => startTransition(async () => {
                             const res = await approveUser(u.id)
                             if (res.error) toast.error(res.error)
-                            else toast.success('승인되었습니다.')
+                            else { toast.success('승인되었습니다.'); router.refresh() }
                           })}
                         >
                           승인
@@ -154,7 +156,7 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           onClick={() => startTransition(async () => {
                             const res = await deactivateUser(u.id)
                             if (res.error) toast.error(res.error)
-                            else toast.success('비활성화되었습니다.')
+                            else { toast.success('비활성화되었습니다.'); router.refresh() }
                           })}
                         >
                           비활성화
@@ -168,7 +170,7 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           onClick={() => startTransition(async () => {
                             const res = await approveUser(u.id)
                             if (res.error) toast.error(res.error)
-                            else toast.success('재활성화되었습니다.')
+                            else { toast.success('재활성화되었습니다.'); router.refresh() }
                           })}
                         >
                           재활성화

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { approveSite, rejectSite } from '@/app/actions/settings'
 import {
@@ -29,6 +30,7 @@ export type PendingSite = {
 export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
   const [isPending, startTransition] = useTransition()
   const [localSites, setLocalSites] = useState<PendingSite[]>(sites)
+  const router = useRouter()
 
   function handleApprove(siteId: string, siteName: string) {
     startTransition(async () => {
@@ -38,6 +40,7 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
       } else {
         toast.success(`'${siteName}' 현장이 승인되었습니다.`)
         setLocalSites((prev) => prev.filter((s) => s.id !== siteId))
+        router.refresh()
       }
     })
   }
@@ -51,6 +54,7 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
       } else {
         toast.success(`'${siteName}' 현장이 반려되었습니다.`)
         setLocalSites((prev) => prev.filter((s) => s.id !== siteId))
+        router.refresh()
       }
     })
   }
