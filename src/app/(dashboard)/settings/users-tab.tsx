@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { approveUser, deactivateUser, changeUserRole } from '@/app/actions/settings'
 import {
@@ -43,13 +42,17 @@ const statusVariant: Record<string, 'default' | 'secondary' | 'outline' | 'destr
   inactive: 'outline',
 }
 
-export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: string }) {
+export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]; myRole: string }) {
   const [tab, setTab] = useState<'all' | 'pending'>('all')
   const [isPending, setIsPending] = useState(false)
-  const router = useRouter()
+  const [users, setUsers] = useState<UserProfile[]>(initialUsers)
 
   const pendingUsers = users.filter((u) => u.status === 'pending')
   const displayed = tab === 'pending' ? pendingUsers : users
+
+  function updateUser(id: string, patch: Partial<UserProfile>) {
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, ...patch } : u))
+  }
 
   return (
     <div className="space-y-4">
@@ -112,7 +115,10 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                           try {
                             const res = await changeUserRole(u.id, val)
                             if (res.error) toast.error(res.error)
-                            else { toast.success('권한이 변경되었습니다.'); router.refresh() }
+                            else {
+                              updateUser(u.id, { role: val })
+                              toast.success('권한이 변경되었습니다.')
+                            }
                           } finally { setIsPending(false) }
                         }}
                         className="h-7 rounded-md border border-input bg-transparent px-2 text-xs outline-none"
@@ -145,7 +151,10 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                             try {
                               const res = await approveUser(u.id)
                               if (res.error) toast.error(res.error)
-                              else { toast.success('승인되었습니다.'); router.refresh() }
+                              else {
+                                updateUser(u.id, { status: 'active' })
+                                toast.success('승인되었습니다.')
+                              }
                             } finally { setIsPending(false) }
                           }}
                         >
@@ -162,7 +171,10 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                             try {
                               const res = await deactivateUser(u.id)
                               if (res.error) toast.error(res.error)
-                              else { toast.success('비활성화되었습니다.'); router.refresh() }
+                              else {
+                                updateUser(u.id, { status: 'inactive' })
+                                toast.success('비활성화되었습니다.')
+                              }
                             } finally { setIsPending(false) }
                           }}
                         >
@@ -179,7 +191,10 @@ export function UsersTab({ users, myRole }: { users: UserProfile[]; myRole: stri
                             try {
                               const res = await approveUser(u.id)
                               if (res.error) toast.error(res.error)
-                              else { toast.success('재활성화되었습니다.'); router.refresh() }
+                              else {
+                                updateUser(u.id, { status: 'active' })
+                                toast.success('재활성화되었습니다.')
+                              }
                             } finally { setIsPending(false) }
                           }}
                         >

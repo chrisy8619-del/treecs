@@ -1,7 +1,6 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 export type SettingsFormState = {
   error: string
@@ -58,100 +57,75 @@ export async function updatePassword(
 }
 
 export async function approveUser(userId: string): Promise<{ error?: string }> {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: '인증이 필요합니다.' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
 
-    const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-    const admin = createAdminClient()
-    const { error } = await admin.from('profiles').update({ status: 'active' }).eq('id', userId)
-    if (error) return { error: `승인 실패: ${error.message}` }
+  const { error } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId)
+  if (error) return { error: `승인 실패: ${error.message}` }
 
-    return {}
-  } catch (e) {
-    return { error: `오류: ${e instanceof Error ? e.message : String(e)}` }
-  }
+  return {}
 }
 
 export async function deactivateUser(userId: string): Promise<{ error?: string }> {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: '인증이 필요합니다.' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
 
-    const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-    const admin = createAdminClient()
-    const { error } = await admin.from('profiles').update({ status: 'inactive' }).eq('id', userId)
-    if (error) return { error: `비활성화 실패: ${error.message}` }
+  const { error } = await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId)
+  if (error) return { error: `비활성화 실패: ${error.message}` }
 
-    return {}
-  } catch (e) {
-    return { error: `오류: ${e instanceof Error ? e.message : String(e)}` }
-  }
+  return {}
 }
 
 export async function changeUserRole(userId: string, role: string): Promise<{ error?: string }> {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: '인증이 필요합니다.' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
 
-    const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if (me?.role !== 'superadmin') return { error: '권한이 없습니다.' }
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (me?.role !== 'superadmin') return { error: '권한이 없습니다.' }
 
-    const admin = createAdminClient()
-    const { error } = await admin.from('profiles').update({ role }).eq('id', userId)
-    if (error) return { error: `권한 변경 실패: ${error.message}` }
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
+  if (error) return { error: `권한 변경 실패: ${error.message}` }
 
-    return {}
-  } catch (e) {
-    return { error: `오류: ${e instanceof Error ? e.message : String(e)}` }
-  }
+  return {}
 }
 
 export async function approveSite(siteId: string): Promise<{ error?: string }> {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: '인증이 필요합니다.' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
 
-    const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-    const admin = createAdminClient()
-    const { error } = await admin.from('sites').update({ status: 'active' }).eq('id', siteId)
-    if (error) return { error: `승인 실패: ${error.message}` }
+  const { error } = await supabase.from('sites').update({ status: 'active' }).eq('id', siteId)
+  if (error) return { error: `승인 실패: ${error.message}` }
 
-    return {}
-  } catch (e) {
-    return { error: `오류: ${e instanceof Error ? e.message : String(e)}` }
-  }
+  return {}
 }
 
 export async function rejectSite(siteId: string): Promise<{ error?: string }> {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: '인증이 필요합니다.' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: '인증이 필요합니다.' }
 
-    const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-    const admin = createAdminClient()
-    // 반려 시 해당 현장의 planting_records도 함께 삭제
-    await admin.from('planting_records').delete().eq('site_id', siteId)
-    const { error } = await admin.from('sites').delete().eq('id', siteId)
-    if (error) return { error: `반려 실패: ${error.message}` }
+  // 반려 시 해당 현장의 planting_records도 함께 삭제
+  await supabase.from('planting_records').delete().eq('site_id', siteId)
+  const { error } = await supabase.from('sites').delete().eq('id', siteId)
+  if (error) return { error: `반려 실패: ${error.message}` }
 
-    return {}
-  } catch (e) {
-    return { error: `오류: ${e instanceof Error ? e.message : String(e)}` }
-  }
+  return {}
 }
 
 export async function saveUploadLog(log: {

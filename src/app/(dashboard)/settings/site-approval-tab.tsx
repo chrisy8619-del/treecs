@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { approveSite, rejectSite } from '@/app/actions/settings'
 import {
@@ -30,7 +29,6 @@ export type PendingSite = {
 export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
   const [isPending, setIsPending] = useState(false)
   const [localSites, setLocalSites] = useState<PendingSite[]>(sites)
-  const router = useRouter()
 
   async function handleApprove(siteId: string, siteName: string) {
     setIsPending(true)
@@ -41,7 +39,6 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
       } else {
         toast.success(`'${siteName}' 현장이 승인되었습니다.`)
         setLocalSites((prev) => prev.filter((s) => s.id !== siteId))
-        router.refresh()
       }
     } finally { setIsPending(false) }
   }
@@ -56,7 +53,6 @@ export function SiteApprovalTab({ sites }: { sites: PendingSite[] }) {
       } else {
         toast.success(`'${siteName}' 현장이 반려되었습니다.`)
         setLocalSites((prev) => prev.filter((s) => s.id !== siteId))
-        router.refresh()
       }
     } finally { setIsPending(false) }
   }
