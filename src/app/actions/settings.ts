@@ -57,45 +57,63 @@ export async function updatePassword(
 }
 
 export async function approveUser(userId: string): Promise<{ error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: '인증이 필요합니다.' }
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError) return { error: `인증 오류: ${authError.message}` }
+    if (!user) return { error: '인증이 필요합니다.' }
 
-  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+    const { data: me, error: meError } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (meError) return { error: `프로필 조회 실패: ${meError.message}` }
+    if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-  const { error } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId)
-  if (error) return { error: `승인 실패: ${error.message}` }
+    const { error } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId)
+    if (error) return { error: `승인 실패: ${error.message} (code: ${error.code})` }
 
-  return {}
+    return {}
+  } catch (e) {
+    return { error: `예외 발생: ${e instanceof Error ? e.message : String(e)}` }
+  }
 }
 
 export async function deactivateUser(userId: string): Promise<{ error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: '인증이 필요합니다.' }
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError) return { error: `인증 오류: ${authError.message}` }
+    if (!user) return { error: '인증이 필요합니다.' }
 
-  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
+    const { data: me, error: meError } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (meError) return { error: `프로필 조회 실패: ${meError.message}` }
+    if (!me || !['admin', 'superadmin'].includes(me.role)) return { error: '권한이 없습니다.' }
 
-  const { error } = await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId)
-  if (error) return { error: `비활성화 실패: ${error.message}` }
+    const { error } = await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId)
+    if (error) return { error: `비활성화 실패: ${error.message} (code: ${error.code})` }
 
-  return {}
+    return {}
+  } catch (e) {
+    return { error: `예외 발생: ${e instanceof Error ? e.message : String(e)}` }
+  }
 }
 
 export async function changeUserRole(userId: string, role: string): Promise<{ error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: '인증이 필요합니다.' }
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError) return { error: `인증 오류: ${authError.message}` }
+    if (!user) return { error: '인증이 필요합니다.' }
 
-  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (me?.role !== 'superadmin') return { error: '권한이 없습니다.' }
+    const { data: me, error: meError } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (meError) return { error: `프로필 조회 실패: ${meError.message}` }
+    if (me?.role !== 'superadmin') return { error: '권한이 없습니다.' }
 
-  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
-  if (error) return { error: `권한 변경 실패: ${error.message}` }
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
+    if (error) return { error: `권한 변경 실패: ${error.message} (code: ${error.code})` }
 
-  return {}
+    return {}
+  } catch (e) {
+    return { error: `예외 발생: ${e instanceof Error ? e.message : String(e)}` }
+  }
 }
 
 export async function approveSite(siteId: string): Promise<{ error?: string }> {
