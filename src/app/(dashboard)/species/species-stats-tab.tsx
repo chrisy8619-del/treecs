@@ -15,6 +15,7 @@ import {
 // ─── 상수 (추후 관리자 설정으로 확장 가능) ───────────────────────
 const DEFAULT_AVG_DEFECT_RATE = 0.15
 const DEFAULT_SAMPLE_SIZE = 30
+const DEFAULT_MIN_PLANTING = 210
 
 // ─── 타입 ─────────────────────────────────────────────────────────
 export type SpeciesStat = {
@@ -124,6 +125,7 @@ type Props = {
 export function SpeciesStatsTab({ stats }: Props) {
   const [filter, setFilter] = useState<FilterValue>('전체')
   const [search, setSearch] = useState('')
+  const [minPlanting, setMinPlanting] = useState<number>(DEFAULT_MIN_PLANTING)
 
   // 보정 하자율 포함한 계산 결과 목록
   const computed = stats.map((s) => {
@@ -133,8 +135,9 @@ export function SpeciesStatsTab({ stats }: Props) {
     return { ...s, adjustedRate, finalRisk, trust }
   })
 
-  // 필터 매핑: '표본부족' 필터는 risk가 '표본부족' 또는 '참고' 모두 포함
+  // 식재 주수 필터 적용 후 리스크·검색 필터
   const filtered = computed
+    .filter((s) => s.totalQty >= minPlanting)
     .filter((s) => {
       if (filter === '전체') return true
       if (filter === '표본부족') return s.finalRisk === '표본부족' || s.finalRisk === '참고'
@@ -152,6 +155,11 @@ export function SpeciesStatsTab({ stats }: Props) {
         <CardTitle className="text-base">수목 현황</CardTitle>
         <p className="text-xs text-muted-foreground">
           전체 수종 하자율 분석 · 표본 신뢰도 기반 리스크 4단계 분류
+          {' · '}
+          <span className="font-medium text-foreground">{computed.length}종 전체</span>
+          {' 중 '}
+          <span className="font-medium text-foreground">{filtered.length}종 표시</span>
+          {minPlanting > 0 && ` (식재 ${minPlanting}주 이상)`}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -174,12 +182,23 @@ export function SpeciesStatsTab({ stats }: Props) {
               </button>
             )
           })}
+          <div className="ml-2 flex items-center gap-1.5 rounded-lg border border-input bg-transparent px-3 h-8">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">식재 주수</span>
+            <input
+              type="number"
+              min={0}
+              value={minPlanting}
+              onChange={(e) => setMinPlanting(Math.max(0, Number(e.target.value)))}
+              className="w-16 bg-transparent text-sm text-right outline-none tabular-nums"
+            />
+            <span className="text-xs text-muted-foreground">주 이상</span>
+          </div>
           <input
             type="text"
             placeholder="수종명 검색..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="ml-2 h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 w-40"
+            className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 w-40"
           />
         </div>
 
@@ -323,6 +342,8 @@ export function SpeciesStatsTab({ stats }: Props) {
             <p className="text-sm">
               {stats.length === 0
                 ? '식재 기록이 있는 수종이 없습니다.'
+                : minPlanting > 0 && computed.filter((s) => s.totalQty >= minPlanting).length === 0
+                ? `식재 주수 ${minPlanting}주 이상인 수종이 없습니다.`
                 : '검색 조건에 맞는 수종이 없습니다.'}
             </p>
           </div>
