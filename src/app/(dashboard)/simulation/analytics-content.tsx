@@ -1,14 +1,13 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   YearlyDefectChart,
   SeasonDefectChart,
   ContractorDefectChart,
-  SpeciesDefectChart,
   SpeciesSeasonHeatmap,
   type SiteReserveData,
   type HeatmapData,
 } from '../analytics/charts'
 import { SiteAnalysisTable } from '../analytics/site-analysis-table'
+import { SpeciesStatsTab } from '../species/species-stats-tab'
 import { Leaf, TrendingDown, AlertTriangle, Calculator } from 'lucide-react'
 
 export type AnalyticsProps = {
@@ -149,24 +148,27 @@ export function AnalyticsContent({
             </div>
           </div>
 
-          {/* 2행: 수종별 TOP10 + 협력사별 TOP10 */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-              <h2 className="text-sm font-semibold text-[#111827] mb-1">수종별 하자율 TOP 10</h2>
-              {speciesData.length > 0 ? (
-                <SpeciesDefectChart data={speciesData} />
-              ) : (
-                <div className="flex h-[260px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
-              )}
-            </div>
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-              <h2 className="text-sm font-semibold text-[#111827] mb-1">협력사별 하자율 TOP 10</h2>
-              {contractorData.length > 0 ? (
-                <ContractorDefectChart data={contractorData} />
-              ) : (
-                <div className="flex h-[260px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
-              )}
-            </div>
+          {/* 수종별 하자율 테이블 (수종 관리 > 수목 현황과 동일) */}
+          {speciesData.length > 0 && (
+            <SpeciesStatsTab
+              stats={speciesData.map((s) => ({
+                speciesNameKo: s.name,
+                groupName: null,
+                totalQty: s.inspected,
+                totalDefectQty: s.defect,
+                defectRate: s.defect_rate,
+              }))}
+            />
+          )}
+
+          {/* 협력사별 TOP10 */}
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+            <h2 className="text-sm font-semibold text-[#111827] mb-1">협력사별 하자율 TOP 10</h2>
+            {contractorData.length > 0 ? (
+              <ContractorDefectChart data={contractorData} />
+            ) : (
+              <div className="flex h-[260px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
+            )}
           </div>
 
           {/* 수종별 계절 히트맵 */}
