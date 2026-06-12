@@ -4,13 +4,11 @@ import {
   SeasonDefectChart,
   ContractorDefectChart,
   SpeciesDefectChart,
-  SiteReserveCostChart,
   SpeciesSeasonHeatmap,
   type SiteReserveData,
   type HeatmapData,
 } from '../analytics/charts'
 import { SiteAnalysisTable } from '../analytics/site-analysis-table'
-import { SpeciesAnalysisTable } from '../analytics/species-analysis-table'
 import { Leaf, TrendingDown, AlertTriangle, Calculator } from 'lucide-react'
 
 export type AnalyticsProps = {
@@ -190,18 +188,6 @@ export function AnalyticsContent({
             <SiteAnalysisTable siteData={siteData} siteReserveData={siteReserveData} />
           )}
 
-          {/* 수종별 분석 테이블 */}
-          {speciesData.length > 0 && (
-            <SpeciesAnalysisTable data={speciesData} />
-          )}
-
-          {/* 현장별 예상 예비비 차트 */}
-          {siteReserveData.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-              <h2 className="text-sm font-semibold text-[#111827] mb-4">현장별 예상 하자 저감 비용</h2>
-              <SiteReserveCostChart data={siteReserveData} />
-            </div>
-          )}
         </>
       )}
     </div>
