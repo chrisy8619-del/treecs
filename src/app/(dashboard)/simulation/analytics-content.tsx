@@ -158,28 +158,32 @@ export function AnalyticsContent({
             </div>
           </div>
 
-          {/* 2열: 수목 현황 + 협력사별 TOP10 */}
-          <div className="grid gap-6 md:grid-cols-2 items-start">
-            {/* 수목 현황 (수종 관리 > 수목 현황과 동일 데이터) */}
+          {/* 2열: 수목 현황 + 협력사별 TOP10 — 동일 높이(600px), 내용 길면 내부 스크롤 */}
+          <div className="grid gap-6 md:grid-cols-2 items-stretch">
+            {/* 수목 현황 */}
             {speciesData.length > 0 && (
-              <SpeciesStatsTab
-                stats={speciesData.map((s) => ({
-                  speciesNameKo: s.name,
-                  groupName: null,
-                  totalQty: s.inspected,
-                  totalDefectQty: s.defect,
-                  defectRate: s.defect_rate,
-                }))}
-              />
+              <div className="flex flex-col min-h-0 h-[600px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white">
+                <SpeciesStatsTab
+                  stats={speciesData.map((s) => ({
+                    speciesNameKo: s.name,
+                    groupName: null,
+                    totalQty: s.inspected,
+                    totalDefectQty: s.defect,
+                    defectRate: s.defect_rate,
+                  }))}
+                />
+              </div>
             )}
 
             {/* 협력사별 TOP10 */}
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-              <h2 className="text-sm font-semibold text-[#111827] mb-1">협력사별 하자율 TOP 10</h2>
+            <div className="flex flex-col h-[600px] overflow-hidden bg-white rounded-2xl border border-[#E5E7EB] p-5">
+              <h2 className="text-sm font-semibold text-[#111827] mb-1 shrink-0">협력사별 하자율 TOP 10</h2>
               {contractorData.length > 0 ? (
-                <ContractorDefectChart data={contractorData} />
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  <ContractorDefectChart data={contractorData} />
+                </div>
               ) : (
-                <div className="flex h-[260px] items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
+                <div className="flex flex-1 items-center justify-center text-sm text-[#9CA3AF]">데이터 없음</div>
               )}
             </div>
           </div>

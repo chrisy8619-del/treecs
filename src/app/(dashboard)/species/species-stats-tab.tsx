@@ -150,8 +150,8 @@ export function SpeciesStatsTab({ stats }: Props) {
   const maxAdjusted = Math.max(...computed.map((s) => s.adjustedRate), 0.3)
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="h-full flex flex-col overflow-hidden">
+      <CardHeader className="shrink-0">
         <CardTitle className="text-base">수목 현황</CardTitle>
         <p className="text-xs text-muted-foreground">
           전체 수종 하자율 분석 · 표본 신뢰도 기반 리스크 4단계 분류
@@ -162,9 +162,9 @@ export function SpeciesStatsTab({ stats }: Props) {
           {minPlanting > 0 && ` (식재 ${minPlanting}주 이상)`}
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col flex-1 min-h-0 space-y-4 overflow-hidden">
         {/* 필터 + 검색 */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           {RISK_FILTERS.map(({ label, value, dotClass }) => {
             const isActive = filter === value
             return (
@@ -202,9 +202,9 @@ export function SpeciesStatsTab({ stats }: Props) {
           />
         </div>
 
-        {/* 테이블 */}
+        {/* 테이블 — 내용 넘치면 세로 스크롤 */}
         {filtered.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="flex-1 min-h-0 overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
