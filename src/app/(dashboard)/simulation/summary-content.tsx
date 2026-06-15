@@ -309,8 +309,8 @@ export function SummaryContent({
 
       {/* ③ 연도별·계절별 차트 + 식재 전략 (좌 2/3 | 우 1/3) */}
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* 왼쪽: 연도별 + 계절별 차트 */}
-        <div className="lg:col-span-2 grid gap-4 md:grid-cols-2">
+        {/* 왼쪽: 연도별 + 계절별 차트 (수직 스택) */}
+        <div className="lg:col-span-2 grid gap-4">
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
             <h2 className="text-sm font-semibold text-[#111827] mb-1">연도별 하자율 추이</h2>
             {displayYearly.length >= 2 && (
@@ -320,7 +320,7 @@ export function SummaryContent({
                   : '하자율이 안정적으로 유지되고 있습니다.'}
               </p>
             )}
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={displayYearly} margin={{ top: 8, right: 24, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="summaryAreaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -340,7 +340,7 @@ export function SummaryContent({
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
             <h2 className="text-sm font-semibold text-[#111827] mb-1">계절별 하자율 <span className="text-xs font-normal text-[#9CA3AF]">입주시기 기준</span></h2>
             <p className="text-xs text-[#6B7280] mb-3">겨울 식재 하자율이 가장 높습니다.</p>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={180}>
               <BarChart data={[
                 { label: '봄', rate: 10.56, fill: '#F5B942' },
                 { label: '여름', rate: 9.51, fill: '#6FCF97' },
