@@ -8,7 +8,16 @@ import {
 } from '../analytics/charts'
 import { SiteAnalysisTable } from '../analytics/site-analysis-table'
 import { SpeciesStatsTab } from '../species/species-stats-tab'
+import { KoreaMap, type RegionData } from './korea-map'
 import { Leaf, TrendingDown, AlertTriangle, Calculator } from 'lucide-react'
+
+type GeoRegion = {
+  name_en: string
+  name_ko: string
+  d: string
+  cx: number
+  cy: number
+}
 
 export type AnalyticsProps = {
   yearlyData: { year: number; defect_rate: number; total_quantity: number; total_defect_quantity: number }[]
@@ -23,13 +32,35 @@ export type AnalyticsProps = {
   totalPlantDefect: number
   overallRate: number | null
   hasPlantingAnalysis: boolean
+  /** 서버에서 파싱한 한국 지도 SVG path 데이터 */
+  geoRegions: GeoRegion[]
 }
+
+// 지역별 더미 하자 데이터 (실제 API 연동 전 임시값, AI 예측값 필드 분리)
+const DUMMY_REGION_DATA: RegionData[] = [
+  { region_key: 'Gyeonggi-do',      label: '경기', defect_rate: 0.132, defect_qty: 4820, planted_qty: 36520, top_species: ['이팝나무', '느티나무'] },
+  { region_key: 'Gangwon-do',       label: '강원', defect_rate: 0.167, defect_qty: 1840, planted_qty: 11020, top_species: ['소나무', '자작나무'] },
+  { region_key: 'Chungcheongbuk-do',label: '충북', defect_rate: 0.112, defect_qty:  980, planted_qty:  8750, top_species: ['산수유', '매화'] },
+  { region_key: 'Chungcheongnam-do',label: '충남', defect_rate: 0.119, defect_qty: 1120, planted_qty:  9410, top_species: ['벚나무', '이팝나무'] },
+  { region_key: 'Gyeongsangbuk-do', label: '경북', defect_rate: 0.143, defect_qty: 2210, planted_qty: 15450, top_species: ['은행나무', '소나무'] },
+  { region_key: 'Gyeongsangnam-do', label: '경남', defect_rate: 0.138, defect_qty: 1960, planted_qty: 14200, top_species: ['동백나무', '치자나무'] },
+  { region_key: 'Jeollabuk-do',     label: '전북', defect_rate: 0.110, defect_qty:  870, planted_qty:  7910, top_species: ['배롱나무', '산수유'] },
+  { region_key: 'Jeollanam-do',     label: '전남', defect_rate: 0.108, defect_qty: 1030, planted_qty:  9540, top_species: ['동백나무', '황칠나무'] },
+  { region_key: 'Seoul',            label: '서울', defect_rate: 0.128, defect_qty:  640, planted_qty:  5000, top_species: ['느티나무', '은행나무'] },
+  { region_key: 'Incheon',          label: '인천', defect_rate: 0.121, defect_qty:  310, planted_qty:  2560, top_species: ['이팝나무', '왕벚나무'] },
+  { region_key: 'Daejeon',          label: '대전', defect_rate: 0.115, defect_qty:  220, planted_qty:  1910, top_species: ['벚나무', '감나무'] },
+  { region_key: 'Daegu',            label: '대구', defect_rate: 0.135, defect_qty:  480, planted_qty:  3560, top_species: ['은행나무', '배롱나무'] },
+  { region_key: 'Gwangju',          label: '광주', defect_rate: 0.109, defect_qty:  240, planted_qty:  2200, top_species: ['왕벚나무', '산딸나무'] },
+  { region_key: 'Busan',            label: '부산', defect_rate: 0.127, defect_qty:  590, planted_qty:  4650, top_species: ['동백나무', '치자나무'] },
+  { region_key: 'Ulsan',            label: '울산', defect_rate: 0.141, defect_qty:  280, planted_qty:  1980, top_species: ['소나무', '은행나무'] },
+  { region_key: 'Jeju',             label: '제주', defect_rate: 0.098, defect_qty:  310, planted_qty:  3160, top_species: ['동백나무', '황칠나무'] },
+]
 
 export function AnalyticsContent({
   yearlyData, seasonData, contractorData, siteData, speciesData,
   siteReserveData, totalReserveCost, heatmapData,
   totalPlanted, totalPlantDefect, overallRate,
-  hasPlantingAnalysis,
+  hasPlantingAnalysis, geoRegions,
 }: AnalyticsProps) {
   const hasData = siteData.length > 0 || yearlyData.length > 0 || hasPlantingAnalysis
 
@@ -147,6 +178,29 @@ export function AnalyticsContent({
               )}
             </div>
           </div>
+
+          {/* 지역별 하자 위험 지도 */}
+          {geoRegions.length > 0 && (
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[#111827]">지역별 하자 위험 지도</h2>
+                  <p className="text-xs text-[#9CA3AF] mt-0.5">시도별 예상 하자율 분포 (AI 예측 기준)</p>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-[#6B7280]">
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-[#FECACA] border border-[#EF4444]" />높음 ≥15%</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-[#FDE68A] border border-[#F59E0B]" />중간 12~15%</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-[#BBF7D0] border border-[#22C55E]" />낮음 &lt;12%</span>
+                </div>
+              </div>
+              <div className="max-w-xs mx-auto">
+                <KoreaMap
+                  geoRegions={geoRegions}
+                  regionData={DUMMY_REGION_DATA}
+                />
+              </div>
+            </div>
+          )}
 
           {/* 수종별 하자율 테이블 (수종 관리 > 수목 현황과 동일) */}
           {speciesData.length > 0 && (

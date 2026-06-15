@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { promises as fs } from 'fs'
+import path from 'path'
 import { DashboardTabsClient } from './dashboard-tabs-client'
 import { type SiteOption, type SubstitutionMap, type AltSpeciesRec } from './simulation-client'
 import { type AnalyticsProps } from './analytics-content'
@@ -12,6 +14,18 @@ function riskLabel(rate: number) {
   if (rate >= 0.20) return '🔴 고위험'
   if (rate >= 0.10) return '🟡 중위험'
   return '🟢 저위험'
+}
+
+type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
+
+async function loadGeoRegions(): Promise<GeoRegion[]> {
+  try {
+    const filePath = path.join(process.cwd(), 'public', 'korea-regions.json')
+    const raw = await fs.readFile(filePath, 'utf-8')
+    return JSON.parse(raw) as GeoRegion[]
+  } catch {
+    return []
+  }
 }
 
 export default async function SimulationPage() {
@@ -95,6 +109,9 @@ export default async function SimulationPage() {
     substitute2: r.substitute2 ?? null,
     substitute3: r.substitute3 ?? null,
   }))
+
+  // ── 지도 데이터 ──
+  const geoRegions = await loadGeoRegions()
 
   // ── 대시보드 탭 (analytics) 데이터 ──
   const [yearlyRes, itemsRes, contractorRes, plantingRes, plantingSummaryRes] = await Promise.all([
@@ -290,6 +307,7 @@ export default async function SimulationPage() {
     siteReserveData, totalReserveCost, heatmapData,
     totalPlanted, totalPlantDefect, overallRate,
     hasPlantingAnalysis: plantings.length > 0,
+    geoRegions,
   }
 
   return (
