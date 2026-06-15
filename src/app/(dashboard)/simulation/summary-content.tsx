@@ -307,10 +307,13 @@ export function SummaryContent({
         </span>
       </div>
 
-      {/* ③ 연도별·계절별 차트 + 식재 전략 (좌 2/3 | 우 1/3) */}
-      <div className="grid gap-4 lg:grid-cols-3 items-stretch">
-        {/* 왼쪽: 연도별 + 계절별 차트 (수직 스택) — ⑤ 하자율 추이 카드와 동일 스타일 */}
-        <div className="lg:col-span-2 grid gap-4">
+      {/* ③ Row A: 좌(연도별+계절별+리스크) | 우(식재 전략) — KPI 카드 비율 그대로 50:50 */}
+      <div className="grid gap-4 md:grid-cols-2 items-stretch">
+
+        {/* 좌측: 연도별 → 계절별 → 리스크 현황 (3차트 수직 스택) */}
+        <div className="grid gap-4 content-start">
+
+          {/* 연도별 하자율 추이 */}
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
             <h2 className="text-sm font-semibold text-[#111827] mb-3">연도별 하자율 추이</h2>
             <ResponsiveContainer width="100%" height={160}>
@@ -329,11 +332,12 @@ export function SummaryContent({
             </ResponsiveContainer>
           </div>
 
+          {/* 계절별 하자율 */}
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
             <h2 className="text-sm font-semibold text-[#111827] mb-3">계절별 하자율 <span className="text-xs font-normal text-[#9CA3AF]">입주시기 기준</span></h2>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={[
-                { label: '봄', rate: 10.56 },
+                { label: '봄',  rate: 10.56 },
                 { label: '여름', rate: 9.51 },
                 { label: '가을', rate: 13.5 },
                 { label: '겨울', rate: 20.49 },
@@ -353,9 +357,32 @@ export function SummaryContent({
               </BarChart>
             </ResponsiveContainer>
           </div>
+
+          {/* 리스크 현황 — 수종별 하자율 TOP 5 */}
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+            <h2 className="text-sm font-semibold text-[#111827] mb-3">
+              리스크 현황 <span className="text-xs font-normal text-[#9CA3AF]">수종별 하자율 TOP 5</span>
+            </h2>
+            <div className="space-y-2.5">
+              {displayRiskTop5.map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="w-20 text-[#6B7280] truncate shrink-0">{s.name}</span>
+                  <div className="flex-1 h-2 bg-[#F3F4F6] rounded-full">
+                    <div className="h-2 rounded-full" style={{ width: `${s.rate * 100}%`, backgroundColor: s.color }} />
+                  </div>
+                  <span className="w-12 text-right font-semibold" style={{ color: s.color }}>{(s.rate * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-3 border-t border-[#F3F4F6] flex gap-2 text-xs">
+              <span className="px-2.5 py-1 rounded-full bg-[#FEE2E2] text-[#DC2626] font-semibold">높음 18%</span>
+              <span className="px-2.5 py-1 rounded-full bg-[#FEF3C7] text-[#D97706] font-semibold">중간 47%</span>
+              <span className="px-2.5 py-1 rounded-full bg-[#DCFCE7] text-[#16A34A] font-semibold">낮음 35%</span>
+            </div>
+          </div>
         </div>
 
-        {/* 오른쪽: 계절별·지역별·수종별 식재 전략 — ⑤ 협력사 TOP10 카드와 동일 스타일 */}
+        {/* 우측: 계절별·지역별·수종별 식재 전략 — 예상 하자 수량+예상 처리 비용 2칸 너비와 동일 높이 */}
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 flex flex-col">
           <h2 className="text-sm font-semibold text-[#111827] mb-3">계절별·지역별·수종별 식재 전략</h2>
 
@@ -411,9 +438,9 @@ export function SummaryContent({
             </div>
           </div>
 
-          {/* 지도 */}
+          {/* 지도 — 남은 높이 모두 사용 */}
           {geoRegions.length > 0 && (
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-xs font-semibold text-[#374151]">지역별 하자 위험 지도</p>
                 <div className="flex items-center gap-2 text-[9px] text-[#6B7280]">
@@ -422,36 +449,18 @@ export function SummaryContent({
                   <span className="flex items-center gap-0.5"><span className="inline-block w-2 h-2 rounded-sm bg-[#BBF7D0] border border-[#22C55E]" />낮음</span>
                 </div>
               </div>
-              <div className="flex justify-center flex-1">
-                <KoreaMap geoRegions={geoRegions} regionData={regionData} width={240} height={300} />
+              <div className="flex justify-center flex-1 items-center">
+                <KoreaMap geoRegions={geoRegions} regionData={regionData} width={260} height={380} />
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ⑤ 하자율 추이 + 협력사 TOP10 */}
+      {/* ④ Row B: 좌(협력사별 TOP10) | 우(AI 권고 액션) */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* 하자율 추이 (작은 버전) */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-          <h2 className="text-sm font-semibold text-[#111827] mb-3">하자율 추이</h2>
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={displayYearly} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#14532D" stopOpacity={0.12} />
-                  <stop offset="95%" stopColor="#14532D" stopOpacity={0.01} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 25]} />
-              <Tooltip formatter={(v) => [`${v}%`, '하자율']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-              <Area type="monotone" dataKey="rate" stroke="#14532D" strokeWidth={2} fill="url(#trendGrad)" dot={{ fill: '#14532D', r: 3 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
 
-        {/* 협력사별 TOP10 */}
+        {/* 협력사별 하자율 TOP 10 */}
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
           <h2 className="text-sm font-semibold text-[#111827] mb-3">협력사별 하자율 TOP 10</h2>
           <div className="space-y-1.5">
@@ -468,32 +477,6 @@ export function SummaryContent({
                 <span className="w-10 text-right font-semibold text-[#374151] shrink-0">{(c.rate * 100).toFixed(1)}%</span>
               </div>
             ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ⑥ 리스크 현황 + AI 권고 액션 */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* 리스크 현황 - 수종별 */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-          <h2 className="text-sm font-semibold text-[#111827] mb-3">
-            리스크 현황 <span className="text-xs font-normal text-[#9CA3AF]">수종별 하자율 TOP 5</span>
-          </h2>
-          <div className="space-y-2.5">
-            {displayRiskTop5.map((s, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="w-20 text-[#6B7280] truncate shrink-0">{s.name}</span>
-                <div className="flex-1 h-2 bg-[#F3F4F6] rounded-full">
-                  <div className="h-2 rounded-full" style={{ width: `${s.rate * 100}%`, backgroundColor: s.color }} />
-                </div>
-                <span className="w-12 text-right font-semibold" style={{ color: s.color }}>{(s.rate * 100).toFixed(1)}%</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#F3F4F6] flex gap-2 text-xs">
-            <span className="px-2.5 py-1 rounded-full bg-[#FEE2E2] text-[#DC2626] font-semibold">높음 18%</span>
-            <span className="px-2.5 py-1 rounded-full bg-[#FEF3C7] text-[#D97706] font-semibold">중간 47%</span>
-            <span className="px-2.5 py-1 rounded-full bg-[#DCFCE7] text-[#16A34A] font-semibold">낮음 35%</span>
           </div>
         </div>
 
