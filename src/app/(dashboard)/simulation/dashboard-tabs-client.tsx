@@ -2,23 +2,30 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { LayoutDashboard, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, BarChart3, FileText } from 'lucide-react'
 import { SimulationClient, type SiteOption, type SubstitutionMap, type AltSpeciesRec } from './simulation-client'
 import type { AnalyticsProps } from './analytics-content'
 import { AnalyticsContent } from './analytics-content'
+import { SummaryContent } from './summary-content'
 
 type Props = {
-  // 시뮬레이터 탭 props
   sites: SiteOption[]
   substitutions: SubstitutionMap[]
   speciesAvgRate: Record<string, number>
   altRecs: AltSpeciesRec[]
-  // 대시보드 탭 props
   analytics: AnalyticsProps
 }
 
+type TabKey = 'summary' | 'dashboard' | 'simulator'
+
 export function DashboardTabsClient({ sites, substitutions, speciesAvgRate, altRecs, analytics }: Props) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'simulator'>('dashboard')
+  const [activeTab, setActiveTab] = useState<TabKey>('summary')
+
+  const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+    { key: 'summary',   label: '요약',      icon: <FileText className="h-4 w-4" /> },
+    { key: 'dashboard', label: '대시보드',   icon: <BarChart3 className="h-4 w-4" /> },
+    { key: 'simulator', label: '시뮬레이터', icon: <LayoutDashboard className="h-4 w-4" /> },
+  ]
 
   return (
     <div className="space-y-0 -m-6">
@@ -36,35 +43,40 @@ export function DashboardTabsClient({ sites, substitutions, speciesAvgRate, altR
 
         {/* 탭 버튼 */}
         <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'dashboard'
-                ? 'bg-white text-[#14532D]'
-                : 'text-white/80 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <BarChart3 className="h-4 w-4" />
-            대시보드
-          </button>
-          <button
-            onClick={() => setActiveTab('simulator')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'simulator'
-                ? 'bg-white text-[#14532D]'
-                : 'text-white/80 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            시뮬레이터
-          </button>
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === tab.key
+                  ? 'bg-white text-[#14532D]'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* 탭 콘텐츠 */}
-      {activeTab === 'dashboard' ? (
+      {activeTab === 'summary' && (
+        <SummaryContent
+          geoRegions={analytics.geoRegions}
+          totalPlanted={analytics.totalPlanted}
+          totalPlantDefect={analytics.totalPlantDefect}
+          overallRate={analytics.overallRate}
+          totalReserveCost={analytics.totalReserveCost}
+          yearlyData={analytics.yearlyData}
+          speciesData={analytics.speciesData}
+          contractorData={analytics.contractorData}
+        />
+      )}
+      {activeTab === 'dashboard' && (
         <AnalyticsContent {...analytics} />
-      ) : (
+      )}
+      {activeTab === 'simulator' && (
         <SimulationClient
           sites={sites}
           substitutions={substitutions}

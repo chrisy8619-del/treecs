@@ -1,0 +1,542 @@
+'use client'
+
+import { useState } from 'react'
+import { KoreaMap, type RegionData } from './korea-map'
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts'
+import { Leaf, TrendingDown, AlertTriangle, Calculator, Sparkles } from 'lucide-react'
+import type { AnalyticsProps } from './analytics-content'
+
+type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
+
+// ── 계절별 지역 하자 데이터 (AI 예측값, 실제 ML 모델 교체 시 이 상수만 API로 대체)
+type SeasonKey = 'spring' | 'summer' | 'fall' | 'winter'
+
+const SEASON_REGION_DATA: Record<SeasonKey, RegionData[]> = {
+  spring: [
+    { region_key: 'Gyeonggi-do',       label: '경기', defect_rate: 0.112, defect_qty: 4100, planted_qty: 36520, top_species: ['이팝나무', '왕벚나무'] },
+    { region_key: 'Gangwon-do',        label: '강원', defect_rate: 0.167, defect_qty: 1840, planted_qty: 11020, top_species: ['소나무', '자작나무'] },
+    { region_key: 'Chungcheongbuk-do', label: '충북', defect_rate: 0.108, defect_qty:  945, planted_qty:  8750, top_species: ['산수유', '매화'] },
+    { region_key: 'Chungcheongnam-do', label: '충남', defect_rate: 0.113, defect_qty: 1063, planted_qty:  9410, top_species: ['벚나무', '이팝나무'] },
+    { region_key: 'Gyeongsangbuk-do',  label: '경북', defect_rate: 0.131, defect_qty: 2024, planted_qty: 15450, top_species: ['은행나무', '소나무'] },
+    { region_key: 'Gyeongsangnam-do',  label: '경남', defect_rate: 0.124, defect_qty: 1761, planted_qty: 14200, top_species: ['동백나무', '치자나무'] },
+    { region_key: 'Jeollabuk-do',      label: '전북', defect_rate: 0.098, defect_qty:  775, planted_qty:  7910, top_species: ['배롱나무', '산수유'] },
+    { region_key: 'Jeollanam-do',      label: '전남', defect_rate: 0.095, defect_qty:  906, planted_qty:  9540, top_species: ['동백나무', '황칠나무'] },
+    { region_key: 'Seoul',             label: '서울', defect_rate: 0.115, defect_qty:  575, planted_qty:  5000, top_species: ['느티나무', '이팝나무'] },
+    { region_key: 'Incheon',           label: '인천', defect_rate: 0.108, defect_qty:  276, planted_qty:  2560, top_species: ['왕벚나무', '이팝나무'] },
+    { region_key: 'Daejeon',           label: '대전', defect_rate: 0.105, defect_qty:  200, planted_qty:  1910, top_species: ['벚나무', '산수유'] },
+    { region_key: 'Daegu',             label: '대구', defect_rate: 0.122, defect_qty:  434, planted_qty:  3560, top_species: ['은행나무', '배롱나무'] },
+    { region_key: 'Gwangju',           label: '광주', defect_rate: 0.096, defect_qty:  211, planted_qty:  2200, top_species: ['왕벚나무', '산딸나무'] },
+    { region_key: 'Busan',             label: '부산', defect_rate: 0.111, defect_qty:  516, planted_qty:  4650, top_species: ['동백나무', '치자나무'] },
+    { region_key: 'Ulsan',             label: '울산', defect_rate: 0.128, defect_qty:  253, planted_qty:  1980, top_species: ['소나무', '은행나무'] },
+    { region_key: 'Jeju',              label: '제주', defect_rate: 0.085, defect_qty:  269, planted_qty:  3160, top_species: ['동백나무', '황칠나무'] },
+  ],
+  summer: [
+    { region_key: 'Gyeonggi-do',       label: '경기', defect_rate: 0.148, defect_qty: 5410, planted_qty: 36520, top_species: ['느티나무', '배롱나무'] },
+    { region_key: 'Gangwon-do',        label: '강원', defect_rate: 0.135, defect_qty: 1488, planted_qty: 11020, top_species: ['잣나무', '전나무'] },
+    { region_key: 'Chungcheongbuk-do', label: '충북', defect_rate: 0.121, defect_qty: 1059, planted_qty:  8750, top_species: ['느티나무', '메타세쿼이아'] },
+    { region_key: 'Chungcheongnam-do', label: '충남', defect_rate: 0.138, defect_qty: 1299, planted_qty:  9410, top_species: ['이팝나무', '배롱나무'] },
+    { region_key: 'Gyeongsangbuk-do',  label: '경북', defect_rate: 0.162, defect_qty: 2503, planted_qty: 15450, top_species: ['소나무', '은행나무'] },
+    { region_key: 'Gyeongsangnam-do',  label: '경남', defect_rate: 0.155, defect_qty: 2201, planted_qty: 14200, top_species: ['배롱나무', '무궁화'] },
+    { region_key: 'Jeollabuk-do',      label: '전북', defect_rate: 0.127, defect_qty: 1005, planted_qty:  7910, top_species: ['배롱나무', '왕벚나무'] },
+    { region_key: 'Jeollanam-do',      label: '전남', defect_rate: 0.132, defect_qty: 1259, planted_qty:  9540, top_species: ['배롱나무', '무궁화'] },
+    { region_key: 'Seoul',             label: '서울', defect_rate: 0.143, defect_qty:  715, planted_qty:  5000, top_species: ['느티나무', '플라타너스'] },
+    { region_key: 'Incheon',           label: '인천', defect_rate: 0.135, defect_qty:  346, planted_qty:  2560, top_species: ['느티나무', '이팝나무'] },
+    { region_key: 'Daejeon',           label: '대전', defect_rate: 0.128, defect_qty:  245, planted_qty:  1910, top_species: ['배롱나무', '무궁화'] },
+    { region_key: 'Daegu',             label: '대구', defect_rate: 0.171, defect_qty:  609, planted_qty:  3560, top_species: ['배롱나무', '무궁화'] },
+    { region_key: 'Gwangju',           label: '광주', defect_rate: 0.125, defect_qty:  275, planted_qty:  2200, top_species: ['배롱나무', '왕벚나무'] },
+    { region_key: 'Busan',             label: '부산', defect_rate: 0.144, defect_qty:  670, planted_qty:  4650, top_species: ['배롱나무', '무궁화'] },
+    { region_key: 'Ulsan',             label: '울산', defect_rate: 0.158, defect_qty:  313, planted_qty:  1980, top_species: ['배롱나무', '소나무'] },
+    { region_key: 'Jeju',              label: '제주', defect_rate: 0.112, defect_qty:  354, planted_qty:  3160, top_species: ['동백나무', '야자나무류'] },
+  ],
+  fall: [
+    { region_key: 'Gyeonggi-do',       label: '경기', defect_rate: 0.124, defect_qty: 4530, planted_qty: 36520, top_species: ['단풍나무', '은행나무'] },
+    { region_key: 'Gangwon-do',        label: '강원', defect_rate: 0.142, defect_qty: 1565, planted_qty: 11020, top_species: ['소나무', '단풍나무'] },
+    { region_key: 'Chungcheongbuk-do', label: '충북', defect_rate: 0.115, defect_qty: 1006, planted_qty:  8750, top_species: ['은행나무', '단풍나무'] },
+    { region_key: 'Chungcheongnam-do', label: '충남', defect_rate: 0.122, defect_qty: 1148, planted_qty:  9410, top_species: ['은행나무', '느티나무'] },
+    { region_key: 'Gyeongsangbuk-do',  label: '경북', defect_rate: 0.138, defect_qty: 2132, planted_qty: 15450, top_species: ['은행나무', '단풍나무'] },
+    { region_key: 'Gyeongsangnam-do',  label: '경남', defect_rate: 0.141, defect_qty: 2002, planted_qty: 14200, top_species: ['감나무', '단풍나무'] },
+    { region_key: 'Jeollabuk-do',      label: '전북', defect_rate: 0.118, defect_qty:  934, planted_qty:  7910, top_species: ['단풍나무', '감나무'] },
+    { region_key: 'Jeollanam-do',      label: '전남', defect_rate: 0.114, defect_qty: 1088, planted_qty:  9540, top_species: ['감나무', '은행나무'] },
+    { region_key: 'Seoul',             label: '서울', defect_rate: 0.128, defect_qty:  640, planted_qty:  5000, top_species: ['은행나무', '단풍나무'] },
+    { region_key: 'Incheon',           label: '인천', defect_rate: 0.118, defect_qty:  302, planted_qty:  2560, top_species: ['은행나무', '느티나무'] },
+    { region_key: 'Daejeon',           label: '대전', defect_rate: 0.112, defect_qty:  214, planted_qty:  1910, top_species: ['은행나무', '감나무'] },
+    { region_key: 'Daegu',             label: '대구', defect_rate: 0.138, defect_qty:  491, planted_qty:  3560, top_species: ['은행나무', '단풍나무'] },
+    { region_key: 'Gwangju',           label: '광주', defect_rate: 0.108, defect_qty:  238, planted_qty:  2200, top_species: ['단풍나무', '감나무'] },
+    { region_key: 'Busan',             label: '부산', defect_rate: 0.124, defect_qty:  577, planted_qty:  4650, top_species: ['감나무', '단풍나무'] },
+    { region_key: 'Ulsan',             label: '울산', defect_rate: 0.135, defect_qty:  267, planted_qty:  1980, top_species: ['단풍나무', '소나무'] },
+    { region_key: 'Jeju',              label: '제주', defect_rate: 0.094, defect_qty:  297, planted_qty:  3160, top_species: ['동백나무', '감나무'] },
+  ],
+  winter: [
+    { region_key: 'Gyeonggi-do',       label: '경기', defect_rate: 0.178, defect_qty: 6501, planted_qty: 36520, top_species: ['소나무', '잣나무'] },
+    { region_key: 'Gangwon-do',        label: '강원', defect_rate: 0.221, defect_qty: 2435, planted_qty: 11020, top_species: ['소나무', '전나무'] },
+    { region_key: 'Chungcheongbuk-do', label: '충북', defect_rate: 0.158, defect_qty: 1383, planted_qty:  8750, top_species: ['소나무', '향나무'] },
+    { region_key: 'Chungcheongnam-do', label: '충남', defect_rate: 0.162, defect_qty: 1524, planted_qty:  9410, top_species: ['소나무', '향나무'] },
+    { region_key: 'Gyeongsangbuk-do',  label: '경북', defect_rate: 0.188, defect_qty: 2905, planted_qty: 15450, top_species: ['소나무', '잣나무'] },
+    { region_key: 'Gyeongsangnam-do',  label: '경남', defect_rate: 0.172, defect_qty: 2442, planted_qty: 14200, top_species: ['소나무', '동백나무'] },
+    { region_key: 'Jeollabuk-do',      label: '전북', defect_rate: 0.145, defect_qty: 1147, planted_qty:  7910, top_species: ['소나무', '동백나무'] },
+    { region_key: 'Jeollanam-do',      label: '전남', defect_rate: 0.138, defect_qty: 1316, planted_qty:  9540, top_species: ['동백나무', '소나무'] },
+    { region_key: 'Seoul',             label: '서울', defect_rate: 0.165, defect_qty:  825, planted_qty:  5000, top_species: ['소나무', '잣나무'] },
+    { region_key: 'Incheon',           label: '인천', defect_rate: 0.158, defect_qty:  404, planted_qty:  2560, top_species: ['소나무', '향나무'] },
+    { region_key: 'Daejeon',           label: '대전', defect_rate: 0.148, defect_qty:  283, planted_qty:  1910, top_species: ['소나무', '향나무'] },
+    { region_key: 'Daegu',             label: '대구', defect_rate: 0.175, defect_qty:  623, planted_qty:  3560, top_species: ['소나무', '잣나무'] },
+    { region_key: 'Gwangju',           label: '광주', defect_rate: 0.132, defect_qty:  290, planted_qty:  2200, top_species: ['동백나무', '소나무'] },
+    { region_key: 'Busan',             label: '부산', defect_rate: 0.151, defect_qty:  702, planted_qty:  4650, top_species: ['동백나무', '소나무'] },
+    { region_key: 'Ulsan',             label: '울산', defect_rate: 0.168, defect_qty:  333, planted_qty:  1980, top_species: ['소나무', '향나무'] },
+    { region_key: 'Jeju',              label: '제주', defect_rate: 0.105, defect_qty:  332, planted_qty:  3160, top_species: ['동백나무', '황칠나무'] },
+  ],
+}
+
+const SEASON_META: Record<SeasonKey, {
+  label: string; period: string; icon: string
+  advice: string; speciesCount: number; defect_rate: number
+  color: string; bgColor: string
+}> = {
+  spring: { label: '봄', period: '3~5월', icon: '🌱', color: '#16A34A', bgColor: '#DCFCE7',
+    advice: '강원권 식재 축소 + 이팝나무·산수유 중심 구성 시 하자율 평균 3~5%p 감소',
+    speciesCount: 28, defect_rate: 12.1 },
+  summer: { label: '여름', period: '6~8월', icon: '☀️', color: '#D97706', bgColor: '#FEF3C7',
+    advice: '대구·경북권 고온 내성 수종(배롱나무·무궁화) 우선 적용 시 하자율 2~4%p 감소',
+    speciesCount: 22, defect_rate: 15.3 },
+  fall:   { label: '가을', period: '9~11월', icon: '🍂', color: '#EA580C', bgColor: '#FFEDD5',
+    advice: '뿌리활착 최적 시기. 은행나무·단풍나무 비중 확대 시 하자율 1~2%p 감소',
+    speciesCount: 31, defect_rate: 13.8 },
+  winter: { label: '겨울', period: '12~2월', icon: '❄️', color: '#2563EB', bgColor: '#DBEAFE',
+    advice: '강원·경북 동절기 식재 최소화. 상록침엽수 위주 구성 필수',
+    speciesCount: 14, defect_rate: 20.5 },
+}
+
+// 리스크 현황 TOP5 (수종별)
+const RISK_TOP5 = [
+  { name: '가시나무', rate: 1.00, color: '#EF4444' },
+  { name: '오죽',    rate: 0.894, color: '#EF4444' },
+  { name: '목련',    rate: 0.540, color: '#F59E0B' },
+  { name: '수수꽃다리', rate: 0.500, color: '#F59E0B' },
+  { name: '저멀앤개나무', rate: 0.479, color: '#F59E0B' },
+]
+
+// 협력사별 하자율 TOP10 (더미)
+const CONTRACTOR_TOP10 = [
+  { name: '삼성물산 에버', rate: 0.272 },
+  { name: '주현조경',      rate: 0.159 },
+  { name: '다원',         rate: 0.144 },
+  { name: '나디엔엘',      rate: 0.137 },
+  { name: '아세아종합건설', rate: 0.115 },
+  { name: '동일조경',      rate: 0.106 },
+  { name: '한설그린',      rate: 0.080 },
+  { name: '정원조경',      rate: 0.066 },
+  { name: '파인우드',      rate: 0.065 },
+  { name: '금슬개발',      rate: 0.016 },
+]
+
+function contractorBarColor(rate: number) {
+  if (rate >= 0.15) return '#22C55E'
+  if (rate >= 0.10) return '#86EFAC'
+  return '#BBF7D0'
+}
+
+type SummaryProps = {
+  geoRegions: GeoRegion[]
+  totalPlanted: number
+  totalPlantDefect: number
+  overallRate: number | null
+  totalReserveCost: number
+  yearlyData: AnalyticsProps['yearlyData']
+  speciesData: AnalyticsProps['speciesData']
+  contractorData: AnalyticsProps['contractorData']
+}
+
+export function SummaryContent({
+  geoRegions, totalPlanted, totalPlantDefect, overallRate,
+  totalReserveCost, yearlyData, speciesData, contractorData,
+}: SummaryProps) {
+  const [activeSeason, setActiveSeason] = useState<SeasonKey>('spring')
+  const seasonMeta = SEASON_META[activeSeason]
+  const regionData = SEASON_REGION_DATA[activeSeason]
+
+  // 실제 데이터 있으면 우선 사용, 없으면 더미
+  const displayPlanted    = totalPlanted > 0 ? totalPlanted : 113970
+  const displayDefect     = totalPlantDefect > 0 ? totalPlantDefect : 16387
+  const displayRate       = overallRate != null ? overallRate * 100 : 14.4
+  const displayCost       = totalReserveCost > 0 ? totalReserveCost : 932033700
+
+  const displayYearly = yearlyData.length > 0
+    ? yearlyData.map((d) => ({ year: `${d.year}년`, rate: parseFloat((d.defect_rate * 100).toFixed(1)) }))
+    : [{ year: '2023년', rate: 15.6 }, { year: '2024년', rate: 14.4 }, { year: '2025년', rate: 14.4 }]
+
+  const riskHigh = speciesData.length > 0 ? speciesData.filter((s) => s.defect_rate >= 0.20).length : 27
+  const riskMid  = speciesData.length > 0 ? speciesData.filter((s) => s.defect_rate >= 0.10 && s.defect_rate < 0.20).length : 29
+  const riskLow  = speciesData.length > 0 ? speciesData.filter((s) => s.defect_rate < 0.10).length : 49
+
+  const displayContractors = contractorData.length > 0
+    ? contractorData.slice(0, 10).map((d) => ({ name: d.name, rate: d.defect_rate }))
+    : CONTRACTOR_TOP10
+
+  const displayRiskTop5 = speciesData.length > 0
+    ? speciesData.slice(0, 5).map((s) => ({
+        name: s.name, rate: s.defect_rate,
+        color: s.defect_rate >= 0.50 ? '#EF4444' : '#F59E0B',
+      }))
+    : RISK_TOP5
+
+  return (
+    <div className="px-6 py-6 space-y-5 bg-[#F8FAF9] min-h-screen">
+
+      {/* ① 히어로: AI 프로세스 + 절감 효과 */}
+      <div className="rounded-2xl bg-[#EFF6E8] border border-[#C6E09A] p-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* AI 프로세스 */}
+          <div className="bg-white rounded-xl p-4">
+            <p className="text-sm font-semibold text-[#111827] mb-4">AI 기반 조경 하자 저감 프로세스</p>
+            <div className="flex items-center justify-between">
+              {([
+                { icon: '📋', label: '식재계획', active: false },
+                { icon: '🧠', label: 'AI위험\n예측', active: true },
+                { icon: '🌿', label: '최적수종\n추천', active: false },
+                { icon: '🌱', label: '식재실행', active: false },
+                { icon: '🛡️', label: '하자저감\n효과', active: false },
+              ] as const).map((step, i) => (
+                <div key={i} className="flex items-center gap-1">
+                  <div className="flex flex-col items-center text-center">
+                    {step.active ? (
+                      <div className="w-10 h-10 rounded-lg bg-[#14532D] flex items-center justify-center text-xl mb-1">
+                        {step.icon}
+                      </div>
+                    ) : (
+                      <div className="text-2xl mb-1">{step.icon}</div>
+                    )}
+                    <span className={`text-[10px] whitespace-pre-line leading-tight ${step.active ? 'text-[#14532D] font-semibold' : 'text-[#6B7280]'}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < 4 && <span className="text-[#D1D5DB] text-sm mx-0.5 mb-3">›</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 절감 효과 */}
+          <div className="bg-white rounded-xl p-4">
+            <p className="text-sm font-semibold text-[#111827] mb-3">계절별·지역별 하자관리 적용 시 하자수량 변화</p>
+            <div className="space-y-2.5">
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#6B7280]">미적용</span>
+                  <span className="text-[#DC2626] font-semibold">16,387주</span>
+                </div>
+                <div className="h-3 bg-[#FECACA] rounded-full" />
+              </div>
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[#6B7280]">적용</span>
+                  <span className="text-[#16A34A] font-semibold">11,564주</span>
+                </div>
+                <div className="h-3 bg-[#F3F4F6] rounded-full relative">
+                  <div className="h-3 bg-[#16A34A] rounded-full absolute left-0 top-0" style={{ width: '70.6%' }} />
+                  <div className="h-3 border border-dashed border-[#16A34A] rounded-full absolute top-0" style={{ left: '70.6%', width: '29.4%' }} />
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 text-center text-sm font-semibold text-[#14532D]">↓ 절감분 4,823주 (29.4%)</p>
+          </div>
+        </div>
+        <p className="mt-3 pt-3 border-t border-[#C6E09A] text-xs text-[#4B7A1A]">
+          분석 모수 113,970주 기준 · 2025.05
+        </p>
+      </div>
+
+      {/* ② KPI 4개 */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3.5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#DCFCE7] flex items-center justify-center shrink-0">
+            <Leaf className="w-5 h-5 text-[#14532D]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#6B7280]">총 식재 수량</p>
+            <p className="text-xl font-bold text-[#111827]">{displayPlanted.toLocaleString()}<span className="text-xs font-normal text-[#9CA3AF] ml-1">주</span></p>
+            <p className="text-[10px] text-[#9CA3AF]">분석 기준 전체 데이터</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3.5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FEF3C7] flex items-center justify-center shrink-0">
+            <TrendingDown className="w-5 h-5 text-[#D97706]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#6B7280]">전체 하자율</p>
+            <p className={`text-xl font-bold ${displayRate >= 20 ? 'text-[#EF4444]' : displayRate >= 10 ? 'text-[#F59E0B]' : 'text-[#111827]'}`}>
+              {displayRate.toFixed(1)}%
+            </p>
+            <p className="text-[10px] text-[#9CA3AF]">전체 식재 기준</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3.5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FEE2E2] flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-[#EF4444]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#6B7280]">예상 하자 수량</p>
+            <p className="text-xl font-bold text-[#EF4444]">{displayDefect.toLocaleString()}<span className="text-xs font-normal text-[#9CA3AF] ml-1">주</span></p>
+            <p className="text-[10px] text-[#9CA3AF]">하자 수량 (점검 기준)</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3.5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#ECFDF5] flex items-center justify-center shrink-0">
+            <Calculator className="w-5 h-5 text-[#166534]" />
+          </div>
+          <div>
+            <p className="text-xs text-[#6B7280]">예상 처리 비용</p>
+            <p className="text-lg font-bold text-[#D97706] truncate">₩{displayCost.toLocaleString()}</p>
+            <p className="text-[10px] text-[#9CA3AF]">조달청 단가 기준</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 리스크 현황 칩 */}
+      <div className="flex flex-wrap items-center gap-2 bg-white rounded-2xl border border-[#E5E7EB] px-5 py-3">
+        <span className="text-sm font-semibold text-[#374151] mr-2">리스크 현황</span>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEE2E2] text-[#DC2626] text-xs font-semibold">
+          🔴 고위험 {riskHigh}종 <span className="font-normal">(≥20%)</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] text-[#D97706] text-xs font-semibold">
+          🟠 중위험 {riskMid}종 <span className="font-normal">(10–20%)</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#DCFCE7] text-[#166534] text-xs font-semibold">
+          🟢 저위험 {riskLow}종 <span className="font-normal">(&lt;10%)</span>
+        </span>
+      </div>
+
+      {/* ③ 연도별 + 계절별 차트 */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+          <h2 className="text-sm font-semibold text-[#111827] mb-1">연도별 하자율 추이</h2>
+          {displayYearly.length >= 2 && (
+            <p className="text-xs text-[#6B7280] mb-3">
+              {displayYearly[displayYearly.length - 1].rate < displayYearly[0].rate
+                ? `최근 ${displayYearly.length - 1}년간 하자율이 ${(displayYearly[0].rate - displayYearly[displayYearly.length - 1].rate).toFixed(1)}% 감소했습니다.`
+                : '하자율이 안정적으로 유지되고 있습니다.'}
+            </p>
+          )}
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={displayYearly} margin={{ top: 8, right: 24, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="summaryAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#14532D" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#14532D" stopOpacity={0.01} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+              <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 25]} />
+              <Tooltip formatter={(v) => [`${v}%`, '하자율']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Area type="monotone" dataKey="rate" stroke="#14532D" strokeWidth={2} fill="url(#summaryAreaGrad)" dot={{ fill: '#14532D', r: 4 }} activeDot={{ r: 6 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+          <h2 className="text-sm font-semibold text-[#111827] mb-1">계절별 하자율 <span className="text-xs font-normal text-[#9CA3AF]">입주시기 기준</span></h2>
+          <p className="text-xs text-[#6B7280] mb-3">겨울 식재 하자율이 가장 높습니다.</p>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={[
+              { label: '봄', rate: 10.56, fill: '#F5B942' },
+              { label: '여름', rate: 9.51, fill: '#6FCF97' },
+              { label: '가을', rate: 13.5, fill: '#F5B942' },
+              { label: '겨울', rate: 20.49, fill: '#EF4444' },
+            ]} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 25]} />
+              <Tooltip formatter={(v) => [`${v}%`, '하자율']} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Bar dataKey="rate" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 11, fontWeight: 600, fill: '#374151', formatter: (v: unknown) => `${v}%` }}>
+                {[
+                  { label: '봄', rate: 10.56, fill: '#F5B942' },
+                  { label: '여름', rate: 9.51, fill: '#6FCF97' },
+                  { label: '가을', rate: 13.5, fill: '#F5B942' },
+                  { label: '겨울', rate: 20.49, fill: '#EF4444' },
+                ].map((entry, i) => <Cell key={i} fill={entry.fill} fillOpacity={entry.label === '겨울' ? 1 : 0.7} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ④ 계절별·지역별·수종별 식재 전략 */}
+      <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+        <h2 className="text-sm font-semibold text-[#111827] mb-3">계절별·지역별·수종별 식재 전략</h2>
+
+        {/* 권고 배너 */}
+        <div className="flex items-start gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-4 py-2.5 mb-4 text-xs text-[#374151]">
+          <span className="text-base shrink-0">✦</span>
+          <span><span className="font-semibold">{seasonMeta.label}철 권고:</span> {seasonMeta.advice}</span>
+        </div>
+
+        {/* 계절 탭 */}
+        <div className="flex gap-2 flex-wrap mb-4">
+          {(Object.entries(SEASON_META) as [SeasonKey, typeof SEASON_META[SeasonKey]][]).map(([key, m]) => (
+            <button
+              key={key}
+              onClick={() => setActiveSeason(key)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                activeSeason === key
+                  ? 'text-white shadow-sm'
+                  : 'bg-[#F9FAFB] text-[#6B7280] border border-[#E5E7EB] hover:bg-[#F3F4F6]'
+              }`}
+              style={activeSeason === key ? { backgroundColor: m.color } : {}}
+            >
+              <span>{m.icon}</span>
+              {m.label} ({m.period})
+            </button>
+          ))}
+        </div>
+
+        {/* 계절 정보 칩 */}
+        <div className="grid grid-cols-2 gap-3 mb-4 max-w-sm">
+          <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] px-3 py-2">
+            <span className="text-lg">🌿</span>
+            <div>
+              <p className="text-[10px] text-[#9CA3AF]">추천 수종</p>
+              <p className="text-base font-bold text-[#111827]">{seasonMeta.speciesCount}종</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] px-3 py-2">
+            <span className="text-lg">📊</span>
+            <div>
+              <p className="text-[10px] text-[#9CA3AF]">{seasonMeta.label}철 예상 하자율</p>
+              <p className={`text-base font-bold ${seasonMeta.defect_rate >= 15 ? 'text-[#EF4444]' : seasonMeta.defect_rate >= 12 ? 'text-[#F59E0B]' : 'text-[#16A34A]'}`}>
+                {seasonMeta.defect_rate}%
+                <span className={`ml-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                  seasonMeta.defect_rate >= 15 ? 'bg-[#FEE2E2] text-[#DC2626]'
+                  : seasonMeta.defect_rate >= 12 ? 'bg-[#FEF3C7] text-[#D97706]'
+                  : 'bg-[#DCFCE7] text-[#166534]'
+                }`}>
+                  {seasonMeta.defect_rate >= 15 ? '높음' : seasonMeta.defect_rate >= 12 ? '중간' : '낮음'}
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 지도 */}
+        {geoRegions.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-[#374151]">지역별 하자 위험 지도</p>
+              <div className="flex items-center gap-3 text-[10px] text-[#6B7280]">
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#FECACA] border border-[#EF4444]" />높음 ≥15%</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#FDE68A] border border-[#F59E0B]" />중간 12~15%</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#BBF7D0] border border-[#22C55E]" />낮음 &lt;12%</span>
+              </div>
+            </div>
+            <div className="max-w-xs mx-auto">
+              <KoreaMap geoRegions={geoRegions} regionData={regionData} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ⑤ 하자율 추이 + 협력사 TOP10 */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* 하자율 추이 (작은 버전) */}
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+          <h2 className="text-sm font-semibold text-[#111827] mb-3">하자율 추이</h2>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={displayYearly} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#14532D" stopOpacity={0.12} />
+                  <stop offset="95%" stopColor="#14532D" stopOpacity={0.01} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 25]} />
+              <Tooltip formatter={(v) => [`${v}%`, '하자율']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+              <Area type="monotone" dataKey="rate" stroke="#14532D" strokeWidth={2} fill="url(#trendGrad)" dot={{ fill: '#14532D', r: 3 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 협력사별 TOP10 */}
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+          <h2 className="text-sm font-semibold text-[#111827] mb-3">협력사별 하자율 TOP 10</h2>
+          <div className="space-y-1.5">
+            {displayContractors.map((c, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className="w-4 text-right text-[#9CA3AF] shrink-0">{i + 1}</span>
+                <span className="w-24 text-[#6B7280] truncate shrink-0">{c.name}</span>
+                <div className="flex-1 h-2 bg-[#F3F4F6] rounded-full">
+                  <div
+                    className="h-2 rounded-full"
+                    style={{ width: `${(c.rate / 0.272) * 100}%`, backgroundColor: contractorBarColor(c.rate) }}
+                  />
+                </div>
+                <span className="w-10 text-right font-semibold text-[#374151] shrink-0">{(c.rate * 100).toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ⑥ 리스크 현황 + AI 권고 액션 */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* 리스크 현황 - 수종별 */}
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+          <h2 className="text-sm font-semibold text-[#111827] mb-3">
+            리스크 현황 <span className="text-xs font-normal text-[#9CA3AF]">수종별 하자율 TOP 5</span>
+          </h2>
+          <div className="space-y-2.5">
+            {displayRiskTop5.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className="w-20 text-[#6B7280] truncate shrink-0">{s.name}</span>
+                <div className="flex-1 h-2 bg-[#F3F4F6] rounded-full">
+                  <div className="h-2 rounded-full" style={{ width: `${s.rate * 100}%`, backgroundColor: s.color }} />
+                </div>
+                <span className="w-12 text-right font-semibold" style={{ color: s.color }}>{(s.rate * 100).toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-[#F3F4F6] flex gap-2 text-xs">
+            <span className="px-2.5 py-1 rounded-full bg-[#FEE2E2] text-[#DC2626] font-semibold">높음 18%</span>
+            <span className="px-2.5 py-1 rounded-full bg-[#FEF3C7] text-[#D97706] font-semibold">중간 47%</span>
+            <span className="px-2.5 py-1 rounded-full bg-[#DCFCE7] text-[#16A34A] font-semibold">낮음 35%</span>
+          </div>
+        </div>
+
+        {/* AI 권고 액션 */}
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+          <h2 className="text-sm font-semibold text-[#111827] mb-3 flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-[#14532D]" /> AI 권고 액션
+          </h2>
+          <div className="space-y-2.5">
+            {[
+              {
+                title: '봄철 고위험 수종 교체',
+                desc: '가시나무·오죽 → 대체 수종 적용 시 하자율',
+                highlight: '평균 3~5%p 감소',
+              },
+              {
+                title: '강원권 봄 식재 축소',
+                desc: '위험도 높음(16.7%) 권역 시기 조정 시',
+                highlight: '약 ₩4,100만원 절감',
+              },
+              {
+                title: '고위험 협력사 사전 관리',
+                desc: '하위 3개사 집중 점검 시 리스크',
+                highlight: '높음 18% → 12%',
+              },
+            ].map((action, i) => (
+              <div key={i} className="rounded-lg border border-[#E5E7EB] px-4 py-3">
+                <p className="text-xs font-semibold text-[#111827]">{action.title}</p>
+                <p className="text-xs text-[#6B7280] mt-0.5">
+                  {action.desc} <span className="text-[#16A34A] font-semibold">{action.highlight}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  )
+}
