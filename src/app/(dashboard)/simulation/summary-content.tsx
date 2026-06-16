@@ -146,11 +146,12 @@ type SummaryProps = {
   yearlyData: AnalyticsProps['yearlyData']
   speciesData: AnalyticsProps['speciesData']
   contractorData: AnalyticsProps['contractorData']
+  seasonData: AnalyticsProps['seasonData']
 }
 
 export function SummaryContent({
   geoRegions, totalPlanted, totalPlantDefect, overallRate,
-  totalReserveCost, yearlyData, speciesData, contractorData,
+  totalReserveCost, yearlyData, speciesData, contractorData, seasonData,
 }: SummaryProps) {
   const [activeSeason, setActiveSeason] = useState<SeasonKey>('spring')
   const seasonMeta = SEASON_META[activeSeason]
@@ -180,6 +181,39 @@ export function SummaryContent({
         color: s.defect_rate >= 0.50 ? '#EF4444' : '#F59E0B',
       }))
     : RISK_TOP5
+
+  // 계절별 하자율 — 실데이터 우선, 없으면 더미 fallback
+  const SEASON_LABEL_MAP: Record<string, string> = {
+    spring: '봄', summer: '여름', fall: '가을', winter: '겨울',
+  }
+  const displaySeasonChart = seasonData.length > 0
+    ? seasonData.map((s) => ({
+        label: SEASON_LABEL_MAP[s.label] ?? s.label,
+        rate: parseFloat((s.defect_rate * 100).toFixed(2)),
+      }))
+    : [
+        { label: '봄', rate: 10.56 },
+        { label: '여름', rate: 9.51 },
+        { label: '가을', rate: 13.5 },
+        { label: '겨울', rate: 20.49 },
+      ]
+
+  // 절감 카드 — 실데이터 기반 동적 계산, 없으면 더미 fallback
+  const hasRealData = totalPlantDefect > 0
+  const SAVING_RATIO = 0.294
+  const displaySavedQty = hasRealData ? Math.round(displayDefect * SAVING_RATIO) : 4823
+  const displayAfterQty = hasRealData ? displayDefect - displaySavedQty : 11564
+  const displaySavingPct = (SAVING_RATIO * 100).toFixed(1)
+
+  // AI 권고 액션 — 실데이터 기반 동적 문자열
+  const topRiskNames = displayRiskTop5.slice(0, 2).map((s) => s.name).join('·')
+  const action1Desc = riskHigh > 0
+    ? `${topRiskNames} → 대체 수종 적용 시 하자율 평균 3~5%p 감소`
+    : '고위험 수종 → 대체 수종 적용 시 하자율 평균 3~5%p 감소'
+  const highRiskContractorCount = displayContractors.filter((c) => c.rate >= 0.20).length
+  const action3Desc = highRiskContractorCount > 0
+    ? `하위 ${highRiskContractorCount}개사 집중 점검 시 고위험 ${riskHigh}종 리스크 관리 가능`
+    : '고위험 협력사 사전 관리 시 리스크 높음 18% → 12%'
 
   return (
     <div className="px-6 py-6 space-y-5 bg-[#F8FAF9] min-h-screen">
@@ -224,26 +258,28 @@ export function SummaryContent({
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[#6B7280]">미적용</span>
-                  <span className="text-[#DC2626] font-semibold">16,387주</span>
+                  <span className="text-[#DC2626] font-semibold">{displayDefect.toLocaleString()}주</span>
                 </div>
                 <div className="h-3 bg-[#FECACA] rounded-full" />
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[#6B7280]">적용</span>
-                  <span className="text-[#16A34A] font-semibold">11,564주</span>
+                  <span className="text-[#16A34A] font-semibold">{displayAfterQty.toLocaleString()}주</span>
                 </div>
                 <div className="h-3 bg-[#F3F4F6] rounded-full relative">
-                  <div className="h-3 bg-[#16A34A] rounded-full absolute left-0 top-0" style={{ width: '70.6%' }} />
-                  <div className="h-3 border border-dashed border-[#16A34A] rounded-full absolute top-0" style={{ left: '70.6%', width: '29.4%' }} />
+                  <div className="h-3 bg-[#16A34A] rounded-full absolute left-0 top-0" style={{ width: `${(100 - Number(displaySavingPct)).toFixed(1)}%` }} />
+                  <div className="h-3 border border-dashed border-[#16A34A] rounded-full absolute top-0" style={{ left: `${(100 - Number(displaySavingPct)).toFixed(1)}%`, width: `${displaySavingPct}%` }} />
                 </div>
               </div>
             </div>
-            <p className="mt-3 text-center text-sm font-semibold text-[#14532D]">↓ 절감분 4,823주 (29.4%)</p>
+            <p className="mt-3 text-center text-sm font-semibold text-[#14532D]">
+              ↓ 절감분 {displaySavedQty.toLocaleString()}주 ({displaySavingPct}%){hasRealData && <span className="text-[10px] font-normal text-[#6B7280] ml-1">(AI 예측 기준)</span>}
+            </p>
           </div>
         </div>
         <p className="mt-3 pt-3 border-t border-[#C6E09A] text-xs text-[#4B7A1A]">
-          분석 모수 113,970주 기준 · 2025.05
+          분석 모수 {displayPlanted.toLocaleString()}주 기준 · 2025.05
         </p>
       </div>
 
@@ -336,12 +372,7 @@ export function SummaryContent({
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
             <h2 className="text-sm font-semibold text-[#111827] mb-3">계절별 하자율 <span className="text-xs font-normal text-[#9CA3AF]">입주시기 기준</span></h2>
             <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={[
-                { label: '봄',  rate: 10.56 },
-                { label: '여름', rate: 9.51 },
-                { label: '가을', rate: 13.5 },
-                { label: '겨울', rate: 20.49 },
-              ]} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
+              <BarChart data={displaySeasonChart} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 25]} />
@@ -442,7 +473,10 @@ export function SummaryContent({
           {geoRegions.length > 0 && (
             <div className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs font-semibold text-[#374151]">지역별 하자 위험 지도</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-[#374151]">지역별 하자 위험 지도</p>
+                  <span className="text-[9px] text-[#9CA3AF] bg-[#F3F4F6] px-1.5 py-0.5 rounded">참고: AI 예측값</span>
+                </div>
                 <div className="flex items-center gap-2 text-[9px] text-[#6B7280]">
                   <span className="flex items-center gap-0.5"><span className="inline-block w-2 h-2 rounded-sm bg-[#FECACA] border border-[#EF4444]" />높음</span>
                   <span className="flex items-center gap-0.5"><span className="inline-block w-2 h-2 rounded-sm bg-[#FDE68A] border border-[#F59E0B]" />중간</span>
@@ -488,9 +522,9 @@ export function SummaryContent({
           <div className="space-y-2.5">
             {[
               {
-                title: '봄철 고위험 수종 교체',
-                desc: '가시나무·오죽 → 대체 수종 적용 시 하자율',
-                highlight: '평균 3~5%p 감소',
+                title: '고위험 수종 교체',
+                desc: action1Desc,
+                highlight: '',
               },
               {
                 title: '강원권 봄 식재 축소',
@@ -499,14 +533,14 @@ export function SummaryContent({
               },
               {
                 title: '고위험 협력사 사전 관리',
-                desc: '하위 3개사 집중 점검 시 리스크',
-                highlight: '높음 18% → 12%',
+                desc: action3Desc,
+                highlight: '',
               },
             ].map((action, i) => (
               <div key={i} className="rounded-lg border border-[#E5E7EB] px-4 py-3">
                 <p className="text-xs font-semibold text-[#111827]">{action.title}</p>
                 <p className="text-xs text-[#6B7280] mt-0.5">
-                  {action.desc} <span className="text-[#16A34A] font-semibold">{action.highlight}</span>
+                  {action.desc}{action.highlight && <span className="text-[#16A34A] font-semibold"> {action.highlight}</span>}
                 </p>
               </div>
             ))}

@@ -8,7 +8,7 @@ export default async function ContractorsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: contractors }, { data: organizations }, { data: profile }, { data: plantingData }] =
+  const [{ data: contractors }, { data: organizations }, { data: profile }, { data: plantingData }, { data: yearlyRaw }] =
     await Promise.all([
       supabase
         .from('contractors')
@@ -23,10 +23,15 @@ export default async function ContractorsPage() {
         .from('planting_records')
         .select('site_id, quantity_planted, expected_defect_qty, contractor_id, contractors(id, contractor_name)')
         .not('expected_defect_qty', 'is', null),
+      supabase.rpc('get_yearly_defect'),
     ])
 
   const isSuperadmin = profile?.role === 'superadmin'
   const currentYear = new Date().getFullYear()
+
+  const yearlyData = (yearlyRaw ?? [])
+    .filter((d: { year: number; defect_rate: number }) => d.year >= 2022 && d.year <= currentYear)
+    .map((d: { year: number; defect_rate: number }) => ({ year: d.year, defect_rate: d.defect_rate }))
 
   // 협력사별 집계 → ContractorStat[]
   type AggValue = { name: string; siteIds: Set<string>; totalQty: number; totalDefectQty: number }
@@ -64,6 +69,7 @@ export default async function ContractorsPage() {
       isSuperadmin={isSuperadmin}
       year={currentYear}
       organizations={organizations ?? []}
+      yearlyData={yearlyData}
     />
   )
 }

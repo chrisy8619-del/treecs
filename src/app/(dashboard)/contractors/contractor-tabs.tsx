@@ -26,6 +26,7 @@ type Props = {
   isSuperadmin: boolean
   year: number
   organizations: OrgOption[]
+  yearlyData?: { year: number; defect_rate: number }[]
 }
 
 type TabId = 'stats' | 'list'
@@ -35,7 +36,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'list', label: '협력사 목록', icon: <List className="h-4 w-4" /> },
 ]
 
-export function ContractorTabs({ contractors, stats, isSuperadmin, year, organizations }: Props) {
+export function ContractorTabs({ contractors, stats, isSuperadmin, year, organizations, yearlyData }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('stats')
 
   return (
@@ -76,7 +77,7 @@ export function ContractorTabs({ contractors, stats, isSuperadmin, year, organiz
 
       {/* 탭 콘텐츠 */}
       <div className="px-6 py-6 space-y-6 bg-[#F8FAF9] min-h-screen">
-        {activeTab === 'stats' && <ContractorStatsTab stats={stats} year={year} />}
+        {activeTab === 'stats' && <ContractorStatsTab stats={stats} year={year} yearlyData={yearlyData} />}
         {activeTab === 'list' && <ContractorListTab contractors={contractors} isSuperadmin={isSuperadmin} />}
       </div>
     </div>

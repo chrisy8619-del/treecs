@@ -96,9 +96,16 @@ export default async function SimulationPage() {
       defect: prev.defect + (row.expected_defect_qty ?? 0),
     })
   }
+  // 베이지안 보정: 소표본 수종의 하자율 과대/과소 추정 완화
+  // species-stats-tab.tsx와 동일한 상수 사용 (DEFAULT_AVG=0.15, DEFAULT_SAMPLE=30)
+  const BAYESIAN_AVG = 0.15
+  const BAYESIAN_SAMPLE = 30
   const speciesAvgRate: Record<string, number> = {}
   for (const [name, v] of aggMap) {
-    speciesAvgRate[name] = v.qty > 0 ? v.defect / v.qty : 0
+    speciesAvgRate[name] =
+      v.qty > 0
+        ? (v.defect + BAYESIAN_AVG * BAYESIAN_SAMPLE) / (v.qty + BAYESIAN_SAMPLE)
+        : BAYESIAN_AVG
   }
 
   const altRecs: AltSpeciesRec[] = (altRecsRaw ?? []).map((r) => ({

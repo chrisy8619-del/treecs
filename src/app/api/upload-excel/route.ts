@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { SEASON_KO_TO_CODE } from '@/lib/season-utils'
+import { SEASON_KO_TO_CODE, defectSeasonToPlantingSeason, resolveSeasonCode } from '@/lib/season-utils'
 
 export const maxDuration = 60
 
@@ -184,9 +184,11 @@ export async function POST(req: NextRequest) {
     const validRisk = ['고위험', '중위험', '저위험'].includes(rawRisk ?? '') ? rawRisk : null
     const planting_date_str = excelDateToString(row['식재시기']) ?? excelDateToString(row['날짜'])
 
-    // 계절 처리
+    // 계절 처리: 엑셀의 "계절(수식)"은 하자 조사 계절 → 한 계절 이전의 식재 계절로 변환
     const seasonRaw = row['계절(수식)'] ? String(row['계절(수식)']).trim() : null
-    const season_code = seasonRaw ? SEASON_KO_TO_CODE[seasonRaw] ?? null : null
+    const season_code = seasonRaw
+      ? defectSeasonToPlantingSeason(seasonRaw)  // 봄→겨울, 여름→봄, 가을→여름, 겨울→가을
+      : resolveSeasonCode(null, planting_date_str)  // 계절 미입력 시 식재시기 날짜로 자동 계산
 
     const insertData: Record<string, unknown> = {
       organization_id: site.organization_id,
@@ -195,8 +197,9 @@ export async function POST(req: NextRequest) {
       planting_date: planting_date_str || null,
       unit_price, expected_defect_rate: defect_rate,
       source_type: 'excel_import',
-      notes: season_code ? `계절:${seasonRaw}` : null,
+      notes: seasonRaw ? `계절:${seasonRaw}` : null,
     }
+    if (season_code) insertData.planting_season = season_code
     if (defect_qty != null) insertData.expected_defect_qty = Math.round(defect_qty)
     if (reserve_cost != null) insertData.expected_reserve_cost = Math.round(reserve_cost)
     if (validRisk) insertData.risk_level = validRisk

@@ -157,9 +157,10 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: { paylo
 type Props = {
   stats: ContractorStat[]
   year: number
+  yearlyData?: { year: number; defect_rate: number }[]
 }
 
-export function ContractorStatsTab({ stats, year }: Props) {
+export function ContractorStatsTab({ stats, year, yearlyData }: Props) {
   const sorted = [...stats].sort((a, b) => b.defectRate - a.defectRate)
   const avgRate = stats.length > 0 ? stats.reduce((s, c) => s + c.defectRate, 0) / stats.length : 0
   const maxRate = sorted.length > 0 ? sorted[0].defectRate : 0
@@ -169,13 +170,15 @@ export function ContractorStatsTab({ stats, year }: Props) {
   const gradeB = stats.filter((c) => getGrade(c.defectRate) === 'B').length
   const gradeC = stats.filter((c) => getGrade(c.defectRate) === 'C').length
 
-  // 연도별 더미 트렌드 (실제 데이터 없으면 현재 평균 기준으로 추세 표시)
-  const trendData = [
-    { year: '2022년', 하자율: parseFloat(((avgRate + 0.04) * 100).toFixed(1)) },
-    { year: '2023년', 하자율: parseFloat(((avgRate + 0.025) * 100).toFixed(1)) },
-    { year: '2024년', 하자율: parseFloat(((avgRate + 0.01) * 100).toFixed(1)) },
-    { year: '2025년', 하자율: parseFloat((avgRate * 100).toFixed(1)) },
-  ]
+  // 연도별 하자율 추이 (실데이터 우선, 없으면 현재 평균 기반 더미 fallback)
+  const trendData = yearlyData && yearlyData.length > 0
+    ? yearlyData.map((d) => ({ year: `${d.year}년`, 하자율: parseFloat((d.defect_rate * 100).toFixed(1)) }))
+    : [
+        { year: '2022년', 하자율: parseFloat(((avgRate + 0.04) * 100).toFixed(1)) },
+        { year: '2023년', 하자율: parseFloat(((avgRate + 0.025) * 100).toFixed(1)) },
+        { year: '2024년', 하자율: parseFloat(((avgRate + 0.01) * 100).toFixed(1)) },
+        { year: '2025년', 하자율: parseFloat((avgRate * 100).toFixed(1)) },
+      ]
 
   const trendFirst = trendData[0].하자율
   const trendLast  = trendData[trendData.length - 1].하자율
