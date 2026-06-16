@@ -12,21 +12,24 @@ export type SeasonCode = typeof SEASON_ORDER[number]
 
 export const KOREAN_SEASONS = new Set(['봄', '여름', '가을', '겨울'])
 
-// 계절(수식) P열 → 식재 계절 변환
-// 예) P열=봄(조사 계절) → 식재는 한 계절 전인 겨울
+// 계절(수식) P열(입주시기 계절) → 식재 계절 변환
+// 예) P열=봄(입주시기 계절) → 식재는 한 계절 전인 겨울
 const PREV_SEASON: Record<string, string> = {
   spring: 'winter', summer: 'spring', fall: 'summer', winter: 'fall',
 }
 
-export function defectSeasonToPlantingSeason(defectSeasonKo: string): string | null {
-  const code = SEASON_KO_TO_CODE[defectSeasonKo.trim()]
+// 입력값(입주시기 계절)을 한 계절 전 식재 계절로 변환
+export function defectSeasonToPlantingSeason(occupancySeasonKo: string): string | null {
+  const code = SEASON_KO_TO_CODE[occupancySeasonKo.trim()]
   if (!code) return null
   return PREV_SEASON[code] ?? null
 }
 
 /**
  * 계절 결정 우선순위:
- * 1) excelSeasonKo ('계절(수식)' 컬럼 한국어 값) → 엑셀에 입력된 계절 코드 직접 사용
+ * 1) excelSeasonKo (이미 식재 계절로 변환된 한국어 값) → 계절 코드 직접 사용
+ *    ※ '계절(수식)' 컬럼 원본(입주시기 계절)은 defectSeasonToPlantingSeason으로
+ *      식재 계절 변환 후 전달되어야 함
  * 2) plantingDateStr ('식재시기' 컬럼 날짜 문자열) → 월 기준 자동 계산
  *    봄: 3~5월 / 여름: 6~8월 / 가을: 9~11월 / 겨울: 12~2월
  */

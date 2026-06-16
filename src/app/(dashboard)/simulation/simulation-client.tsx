@@ -556,13 +556,6 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
           .map((s) => s.name)
         return { season: k, label: SEASON_CODE_TO_KO[k] ?? k, rate, qty: v.qty, topSpecies }
       })
-    const sortedByRate = [...seasonStats].sort((a, b) => b.rate - a.rate)
-    const overallRate = originalTotalQty > 0
-      ? siteRows.reduce((s, r) => {
-          const rate = r.expected_defect_rate ?? (r.species_name ? speciesAvgRate[r.species_name] ?? 0 : 0)
-          return s + rate * r.quantity_planted
-        }, 0) / originalTotalQty
-      : 0
     // 입주 시기별 고정 분석 문구
     const SEASONAL_IMPACT_BY_OCCUPANCY: Record<string, string> = {
       winter: `① 겨울 입주 현장 (가을 식재 시행)\n\n가을철 식재 후 입주 시점이 동절기에 해당하는 현장의 경우, 수목의 활착이 완료되기 이전에 혹한 및 동결 환경에 노출됨으로써 동해(凍害) 피해 발생 가능성이 현저히 높아진다. 이에 따라 내한성(耐寒性)이 취약한 수종—블루엔젤, 대왕참나무 등 동해 민감종—의 가을 식재는 지양하는 것이 바람직하며, 해당 수종은 내한성이 확보된 대체 수종으로 우선 적용하여 동절기 하자를 사전에 억제하는 식재 계획을 수립하였다.`,
@@ -583,17 +576,29 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
       else occupancySeason = 'winter'
     }
 
-    let seasonalImpact: string
-    if (occupancySeason && SEASONAL_IMPACT_BY_OCCUPANCY[occupancySeason]) {
-      seasonalImpact = SEASONAL_IMPACT_BY_OCCUPANCY[occupancySeason]
-    } else if (seasonStats.length === 0) {
-      seasonalImpact = '식재일자 또는 계절(수식) 데이터가 없어 식재 시기별 분석을 수행할 수 없습니다.'
-    } else {
-      // 입주일 없는 경우 식재 데이터 기반 모든 항목 표시
-      seasonalImpact = Object.values(SEASONAL_IMPACT_BY_OCCUPANCY).join('\n\n')
+    // 식재 계절 = 입주 계절의 한 계절 전 (가을 식재 → 겨울 입주 등)
+    const OCCUPANCY_TO_PLANTING_SEASON: Record<string, string> = {
+      spring: 'winter', summer: 'spring', fall: 'summer', winter: 'fall',
     }
 
-    setAiAnalysis({ riskLevel, recommendReason, effectSummary, actionGuide, seasonalImpact, seasonStats })
+    let seasonalImpact: string
+    if (occupancySeason && SEASONAL_IMPACT_BY_OCCUPANCY[occupancySeason]) {
+      // 입주시기에 해당하는 계절 분석 한 가지만 표시
+      seasonalImpact = SEASONAL_IMPACT_BY_OCCUPANCY[occupancySeason]
+    } else {
+      // 입주일이 없는 현장: 분석 불가 안내 (4계절 일괄 표시하지 않음)
+      seasonalImpact = '현장 입주일(준공일) 데이터가 없어 입주시기 기준 식재 시기 분석을 수행할 수 없습니다. 현장 정보에 입주일을 등록해주세요.'
+    }
+
+    // 막대 차트도 입주시기에 대응하는 식재 계절 하나만 표시
+    const plantingSeasonForOccupancy = occupancySeason
+      ? OCCUPANCY_TO_PLANTING_SEASON[occupancySeason]
+      : null
+    const filteredSeasonStats = plantingSeasonForOccupancy
+      ? seasonStats.filter((s) => s.season === plantingSeasonForOccupancy)
+      : []
+
+    setAiAnalysis({ riskLevel, recommendReason, effectSummary, actionGuide, seasonalImpact, seasonStats: filteredSeasonStats })
   }
 
   function generateAiAnalysis() {
@@ -985,26 +990,31 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                   </div>
                   {aiAnalysis.seasonStats.length > 0 && (
                     <div className="space-y-1.5 w-52 shrink-0">
+                      <p className="text-[11px] text-gray-400 mb-1">식재 계절 하자율 (입주시기 기준)</p>
                       {(() => {
-                        const maxRate = Math.max(...aiAnalysis.seasonStats.map((s) => s.rate), 0.001)
-                        const ORDER = ['spring', 'summer', 'fall', 'winter']
-                        const sorted = [...aiAnalysis.seasonStats].sort(
-                          (a, b) => ORDER.indexOf(a.season) - ORDER.indexOf(b.season)
-                        )
-                        return sorted.map((s) => (
-                          <div key={s.season} className="flex items-center gap-2">
-                            <span className="w-6 text-gray-500 shrink-0">{s.label}</span>
-                            <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                              <div
-                                className={`h-3 rounded-full transition-all duration-500 ${s.rate === maxRate ? 'bg-red-400' : 'bg-green-400'}`}
-                                style={{ width: `${Math.round((s.rate / maxRate) * 100)}%` }}
-                              />
+                        // 입주시기에 대응하는 식재 계절 1건만 표시 — 하자율 수준 기준 색상
+                        return aiAnalysis.seasonStats.map((s) => {
+                          const isHigh = s.rate >= 0.20
+                          const isMid = s.rate >= 0.10 && s.rate < 0.20
+                          const barColor = isHigh ? 'bg-red-400' : isMid ? 'bg-orange-400' : 'bg-green-400'
+                          const textColor = isHigh ? 'text-red-600' : isMid ? 'text-orange-500' : 'text-gray-600'
+                          // 폭: 25%를 만점으로 환산 (시각적 비교 기준)
+                          const widthPct = Math.min(Math.round((s.rate / 0.25) * 100), 100)
+                          return (
+                            <div key={s.season} className="flex items-center gap-2">
+                              <span className="w-6 text-gray-500 shrink-0">{s.label}</span>
+                              <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                                <div
+                                  className={`h-3 rounded-full transition-all duration-500 ${barColor}`}
+                                  style={{ width: `${widthPct}%` }}
+                                />
+                              </div>
+                              <span className={`w-10 text-right font-medium shrink-0 ${textColor}`}>
+                                {(s.rate * 100).toFixed(1)}%
+                              </span>
                             </div>
-                            <span className={`w-10 text-right font-medium shrink-0 ${s.rate === maxRate ? 'text-red-600' : 'text-gray-600'}`}>
-                              {(s.rate * 100).toFixed(1)}%
-                            </span>
-                          </div>
-                        ))
+                          )
+                        })
                       })()}
                     </div>
                   )}

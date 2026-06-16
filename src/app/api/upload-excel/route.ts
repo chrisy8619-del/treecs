@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
     const validRisk = ['고위험', '중위험', '저위험'].includes(rawRisk ?? '') ? rawRisk : null
     const planting_date_str = excelDateToString(row['식재시기']) ?? excelDateToString(row['날짜'])
 
-    // 계절 처리: 엑셀의 "계절(수식)"은 하자 조사 계절 → 한 계절 이전의 식재 계절로 변환
+    // 계절 처리: 엑셀의 "계절(수식)"은 입주시기 계절 → 한 계절 이전의 식재 계절로 변환
     const seasonRaw = row['계절(수식)'] ? String(row['계절(수식)']).trim() : null
     const season_code = seasonRaw
       ? defectSeasonToPlantingSeason(seasonRaw)  // 봄→겨울, 여름→봄, 가을→여름, 겨울→가을

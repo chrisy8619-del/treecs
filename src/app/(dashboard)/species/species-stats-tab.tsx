@@ -13,8 +13,8 @@ import {
 } from '@/components/ui/table'
 
 // ─── 상수 (추후 관리자 설정으로 확장 가능) ───────────────────────
-const DEFAULT_AVG_DEFECT_RATE = 0.15
-const DEFAULT_SAMPLE_SIZE = 30
+export const DEFAULT_AVG_DEFECT_RATE = 0.15
+export const DEFAULT_SAMPLE_SIZE = 30
 const DEFAULT_MIN_PLANTING = 210
 
 // ─── 타입 ─────────────────────────────────────────────────────────
@@ -26,11 +26,11 @@ export type SpeciesStat = {
   defectRate: number  // 원본 하자율 (0.0 ~ 1.0)
 }
 
-type RiskLevel = '위험' | '주의' | '보통' | '양호' | '표본부족' | '참고'
+export type RiskLevel = '위험' | '주의' | '보통' | '양호' | '표본부족' | '참고'
 type FilterValue = '전체' | '위험' | '주의' | '보통' | '양호' | '표본부족'
 
 // ─── 보정 하자율 계산 ──────────────────────────────────────────────
-function calcAdjustedRate(defectQty: number, totalQty: number): number {
+export function calcAdjustedRate(defectQty: number, totalQty: number): number {
   return (
     (defectQty + DEFAULT_AVG_DEFECT_RATE * DEFAULT_SAMPLE_SIZE) /
     (totalQty + DEFAULT_SAMPLE_SIZE)
@@ -46,7 +46,7 @@ function getTrustLevel(qty: number): string {
 }
 
 // ─── 최종 리스크 판정 ──────────────────────────────────────────────
-function getFinalRisk(qty: number, adjustedRate: number): RiskLevel {
+export function getFinalRisk(qty: number, adjustedRate: number): RiskLevel {
   if (qty < 10) return '표본부족'
   if (qty < 30) return '참고'
   if (adjustedRate >= 0.30) return '위험'

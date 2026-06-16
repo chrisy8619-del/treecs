@@ -243,7 +243,7 @@ function buildTemplateWorkbook(site: SiteOption | null, rows: PlantingRow[]) {
     ['하자수량', '권장★', '8', '발생 하자 수량. 하자율(하자수량÷수량) 자동계산에 필수 — 미입력 시 모든 분석 불가'],
     ['지역', '권장', '경기도', '지역명 (예: 서울, 경기, 부산 등). 지역별 분석에 영향'],
     ['단가', '권장★', '180000', '숫자만 입력 (콤마 제외 가능). 예상 예비비 자동계산에 필수 — 미입력 시 예비비 분석 불가'],
-    ['계절(수식)', '권장★', '봄', '하자가 발견된 계절 입력 (봄/여름/가을/겨울). 시스템이 식재 계절로 자동변환 (봄→겨울, 여름→봄, 가을→여름, 겨울→가을). 미입력 시 계절별 분석 불가'],
+    ['계절(수식)', '권장★', '봄', '입주시기 계절 입력 (봄/여름/가을/겨울). 시스템이 한 계절 전 식재 계절로 자동변환 (봄→겨울, 여름→봄, 가을→여름, 겨울→가을). 미입력 시 계절별 분석 불가'],
     ['규격', '선택', 'H4.5×W3.0×R15', '직접 입력 가능. 없으면 수고/수관폭/흉고/근원 조합으로 자동생성'],
     ['리스크등급', '선택', '고위험', '없으면 하자율 기준 자동계산 (고위험≥20%, 중위험≥10%, 저위험<10%)'],
     ['권장조치', '선택', '유지 관리', ''],
@@ -314,7 +314,7 @@ function SpeciesSeasonHeatmap({ rows }: { rows: PlantingRow[] }) {
     <div className="border rounded-lg overflow-hidden bg-white">
       <div className="px-4 py-3 border-b bg-[#1a3a2a]">
         <h3 className="text-sm font-semibold text-white">수종별 식재 계절 하자율 히트맵</h3>
-        <p className="text-xs text-green-200 mt-0.5">식재 계절 기준 (조사 계절의 한 계절 이전)</p>
+        <p className="text-xs text-green-200 mt-0.5">식재 계절 기준 (입주시기 계절의 한 계절 이전)</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs border-collapse">

@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import { Leaf, TrendingDown, AlertTriangle, Calculator, Sparkles } from 'lucide-react'
 import type { AnalyticsProps } from './analytics-content'
+import { calcAdjustedRate, getFinalRisk } from '../species/species-stats-tab'
 
 type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
 
@@ -167,19 +168,32 @@ export function SummaryContent({
     ? yearlyData.map((d) => ({ year: `${d.year}년`, rate: parseFloat((d.defect_rate * 100).toFixed(1)) }))
     : [{ year: '2023년', rate: 15.6 }, { year: '2024년', rate: 14.4 }, { year: '2025년', rate: 14.4 }]
 
-  const riskHigh = speciesData.length > 0 ? speciesData.filter((s) => s.defect_rate >= 0.20).length : 27
-  const riskMid  = speciesData.length > 0 ? speciesData.filter((s) => s.defect_rate >= 0.10 && s.defect_rate < 0.20).length : 29
-  const riskLow  = speciesData.length > 0 ? speciesData.filter((s) => s.defect_rate < 0.10).length : 49
+  // 리스크 현황 — 수종 관리(수목 현황) 탭과 동일한 보정 하자율 + 표본 신뢰도 기준
+  // 위험/주의/보통/양호 4단계를 요약 칩 3단계(고/중/저위험)로 매핑:
+  //   위험→고위험, 주의→중위험, 보통+양호→저위험 (표본부족/참고는 칩 집계에서 제외)
+  const speciesAdjusted = speciesData.map((s) => {
+    const adjustedRate = calcAdjustedRate(s.defect, s.inspected)
+    return { ...s, adjustedRate, finalRisk: getFinalRisk(s.inspected, adjustedRate) }
+  })
+
+  const riskHigh = speciesData.length > 0 ? speciesAdjusted.filter((s) => s.finalRisk === '위험').length : 27
+  const riskMid  = speciesData.length > 0 ? speciesAdjusted.filter((s) => s.finalRisk === '주의').length : 29
+  const riskLow  = speciesData.length > 0 ? speciesAdjusted.filter((s) => s.finalRisk === '보통' || s.finalRisk === '양호').length : 49
 
   const displayContractors = contractorData.length > 0
     ? contractorData.slice(0, 10).map((d) => ({ name: d.name, rate: d.defect_rate }))
     : CONTRACTOR_TOP10
 
+  // TOP5 — 수종 관리와 동일하게 보정 하자율 내림차순 (표본부족/참고 제외)
   const displayRiskTop5 = speciesData.length > 0
-    ? speciesData.slice(0, 5).map((s) => ({
-        name: s.name, rate: s.defect_rate,
-        color: s.defect_rate >= 0.50 ? '#EF4444' : '#F59E0B',
-      }))
+    ? speciesAdjusted
+        .filter((s) => s.finalRisk !== '표본부족' && s.finalRisk !== '참고')
+        .sort((a, b) => b.adjustedRate - a.adjustedRate)
+        .slice(0, 5)
+        .map((s) => ({
+          name: s.name, rate: s.adjustedRate,
+          color: s.adjustedRate >= 0.30 ? '#EF4444' : s.adjustedRate >= 0.20 ? '#F59E0B' : '#3B82F6',
+        }))
     : RISK_TOP5
 
   // 계절별 하자율 — 실데이터 우선, 없으면 더미 fallback

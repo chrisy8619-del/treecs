@@ -37,7 +37,7 @@ export async function login(state: { error: string }, formData: FormData) {
     }
   }
 
-  redirect('/dashboard')
+  redirect('/simulation')
 }
 
 export async function signup(state: { error: string }, formData: FormData) {

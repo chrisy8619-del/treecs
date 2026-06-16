@@ -267,16 +267,20 @@ export default async function SimulationPage() {
     .map((v) => ({ name: v.name, defect_rate: v.inspected > 0 ? v.defect / v.inspected : 0, inspected: v.inspected, defect: v.defect }))
     .sort((a, b) => b.defect_rate - a.defect_rate)
 
+  // 수종별 집계 — 수종 관리(수목 현황) 탭과 동일 기준:
+  // expected_defect_qty가 있는 행만 합산(폴백 없음)해야 종수·리스크가 정확히 일치
   const spMap = new Map<string, { inspected: number; defect: number }>()
   for (const p of plantings) {
+    if (p.expected_defect_qty == null) continue
     const sp = Array.isArray(p.species) ? p.species[0] : p.species
-    const name = sp?.species_name_ko ?? '알 수 없음'
+    const name = sp?.species_name_ko
+    if (!name) continue
     const qty = p.quantity_planted ?? 0
-    const defectQty = p.expected_defect_qty ?? Math.round(qty * (p.expected_defect_rate ?? 0))
     const prev = spMap.get(name) ?? { inspected: 0, defect: 0 }
-    spMap.set(name, { inspected: prev.inspected + qty, defect: prev.defect + defectQty })
+    spMap.set(name, { inspected: prev.inspected + qty, defect: prev.defect + (p.expected_defect_qty ?? 0) })
   }
   const speciesDataAnalytics = [...spMap.entries()]
+    .filter(([, v]) => v.inspected > 0)
     .map(([name, v]) => ({ name, defect_rate: v.inspected > 0 ? v.defect / v.inspected : 0, inspected: v.inspected, defect: v.defect }))
     .sort((a, b) => b.defect_rate - a.defect_rate)
 
