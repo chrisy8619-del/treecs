@@ -72,6 +72,7 @@ export function DashboardTabsClient({ sites, substitutions, speciesAvgRate, altR
           speciesData={analytics.speciesData}
           contractorData={analytics.contractorData}
           seasonData={analytics.seasonData}
+          seasonRegionData={analytics.seasonRegionData}
         />
       )}
       {activeTab === 'dashboard' && (

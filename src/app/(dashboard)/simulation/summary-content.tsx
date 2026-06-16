@@ -12,7 +12,8 @@ import { calcAdjustedRate, getFinalRisk } from '../species/species-stats-tab'
 
 type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
 
-// ── 계절별 지역 하자 데이터 (AI 예측값, 실제 ML 모델 교체 시 이 상수만 API로 대체)
+// ── 계절별 지역 하자 데이터 (더미 fallback 전용)
+// 실데이터는 seasonRegionData props로 주입됨. 해당 계절 실데이터가 없을 때만 아래 더미값 표시.
 type SeasonKey = 'spring' | 'summer' | 'fall' | 'winter'
 
 const SEASON_REGION_DATA: Record<SeasonKey, RegionData[]> = {
@@ -148,15 +149,20 @@ type SummaryProps = {
   speciesData: AnalyticsProps['speciesData']
   contractorData: AnalyticsProps['contractorData']
   seasonData: AnalyticsProps['seasonData']
+  seasonRegionData: AnalyticsProps['seasonRegionData']
 }
 
 export function SummaryContent({
   geoRegions, totalPlanted, totalPlantDefect, overallRate,
   totalReserveCost, yearlyData, speciesData, contractorData, seasonData,
+  seasonRegionData,
 }: SummaryProps) {
   const [activeSeason, setActiveSeason] = useState<SeasonKey>('spring')
   const seasonMeta = SEASON_META[activeSeason]
-  const regionData = SEASON_REGION_DATA[activeSeason]
+  // 지도 데이터: 실데이터(seasonRegionData) 우선, 해당 계절 데이터 없으면 더미 fallback
+  const realRegionData = seasonRegionData?.[activeSeason] ?? []
+  const hasRealRegionData = realRegionData.length > 0
+  const regionData = hasRealRegionData ? realRegionData : SEASON_REGION_DATA[activeSeason]
 
   // 실제 데이터 있으면 우선 사용, 없으면 더미
   const displayPlanted    = totalPlanted > 0 ? totalPlanted : 113970
@@ -489,7 +495,11 @@ export function SummaryContent({
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-1.5">
                   <p className="text-xs font-semibold text-[#374151]">지역별 하자 위험 지도</p>
-                  <span className="text-[9px] text-[#9CA3AF] bg-[#F3F4F6] px-1.5 py-0.5 rounded">참고: AI 예측값</span>
+                  {hasRealRegionData ? (
+                    <span className="text-[9px] text-[#166534] bg-[#DCFCE7] px-1.5 py-0.5 rounded">실데이터 · 입주시기 기준</span>
+                  ) : (
+                    <span className="text-[9px] text-[#9CA3AF] bg-[#F3F4F6] px-1.5 py-0.5 rounded">참고: AI 예측값(데이터 없음)</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-[9px] text-[#6B7280]">
                   <span className="flex items-center gap-0.5"><span className="inline-block w-2 h-2 rounded-sm bg-[#FECACA] border border-[#EF4444]" />높음</span>

@@ -6,7 +6,9 @@ import { DashboardTabsClient } from './dashboard-tabs-client'
 import { type SiteOption, type SubstitutionMap, type AltSpeciesRec } from './simulation-client'
 import { type AnalyticsProps } from './analytics-content'
 import { resolveSeasonCode, safeNumZero, SEASON_ORDER, SEASON_CODE_TO_KO } from '@/lib/season-utils'
+import { regionToKey, REGION_KEY_TO_KO } from '@/lib/region-utils'
 import type { SiteReserveData, HeatmapData } from '../analytics/charts'
+import type { RegionData } from './korea-map'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,7 +152,8 @@ export default async function SimulationPage() {
         expected_reserve_cost,
         risk_level,
         species ( species_name_ko ),
-        contractors ( contractor_name )
+        contractors ( contractor_name ),
+        sites ( region )
       `),
     supabase.rpc('get_planting_summary'),
   ])
@@ -303,6 +306,75 @@ export default async function SimulationPage() {
     .map((v) => ({ name: v.name, reserve_cost: v.reserve_cost, defect_rate: v.qty > 0 ? v.defect_qty / v.qty : 0, risk_level: riskLabel(v.qty > 0 ? v.defect_qty / v.qty : 0) }))
     .sort((a, b) => b.reserve_cost - a.reserve_cost)
 
+  // 지역 × 계절 집계 (지도용 실데이터)
+  // 계절 코드는 좌측 계절별 차트와 동일 기준: planting_season(식재 계절) 우선, 없으면 식재일 자동 계산
+  type RegionBucket = { qty: number; defectQty: number; species: Map<string, { qty: number; defectQty: number }> }
+  // regionSeasonAgg[seasonCode][regionKey] = bucket, season 'all' = 계절 무관 전체
+  const regionSeasonAgg: Record<string, Map<string, RegionBucket>> = {}
+  const ensureBucket = (season: string, regionKey: string): RegionBucket => {
+    if (!regionSeasonAgg[season]) regionSeasonAgg[season] = new Map()
+    let b = regionSeasonAgg[season].get(regionKey)
+    if (!b) { b = { qty: 0, defectQty: 0, species: new Map() }; regionSeasonAgg[season].set(regionKey, b) }
+    return b
+  }
+  for (const p of plantings) {
+    const siteRel = (p as unknown as { sites?: { region: string | null } | { region: string | null }[] | null }).sites
+    const siteObj = Array.isArray(siteRel) ? siteRel[0] : siteRel
+    const regionKey = regionToKey(siteObj?.region)
+    if (!regionKey) continue  // 매핑 불가 지역 제외
+    const qty = safeNumZero(p.quantity_planted)
+    if (qty <= 0) continue
+    const rate = p.expected_defect_rate
+    const defectQty = safeNumZero(p.expected_defect_qty) || (rate != null ? Math.round(qty * rate) : 0)
+
+    const seasonKo = (p as unknown as Record<string, string | null>)['planting_season']
+      ? SEASON_CODE_TO_KO[(p as unknown as Record<string, string>)['planting_season']]
+      : null
+    const season = resolveSeasonCode(seasonKo, p.planting_date)
+
+    const sp = Array.isArray(p.species) ? p.species[0] : p.species
+    const spName = (sp as { species_name_ko?: string } | null)?.species_name_ko ?? null
+
+    const addTo = (seasonBucketKey: string) => {
+      const b = ensureBucket(seasonBucketKey, regionKey)
+      b.qty += qty
+      b.defectQty += defectQty
+      if (spName) {
+        const prev = b.species.get(spName) ?? { qty: 0, defectQty: 0 }
+        b.species.set(spName, { qty: prev.qty + qty, defectQty: prev.defectQty + defectQty })
+      }
+    }
+    addTo('all')
+    if (season) addTo(season)
+  }
+
+  const bucketToRegionData = (m: Map<string, RegionBucket> | undefined): RegionData[] => {
+    if (!m) return []
+    return [...m.entries()].map(([regionKey, b]) => {
+      const topSpecies = [...b.species.entries()]
+        .map(([name, sv]) => ({ name, rate: sv.qty > 0 ? sv.defectQty / sv.qty : 0 }))
+        .sort((a, b2) => b2.rate - a.rate)
+        .slice(0, 2)
+        .map((s) => s.name)
+      return {
+        region_key: regionKey,
+        label: REGION_KEY_TO_KO[regionKey] ?? regionKey,
+        defect_rate: b.qty > 0 ? b.defectQty / b.qty : 0,
+        defect_qty: b.defectQty,
+        planted_qty: b.qty,
+        top_species: topSpecies,
+      }
+    })
+  }
+
+  const seasonRegionData: Record<string, RegionData[]> = {
+    spring: bucketToRegionData(regionSeasonAgg['spring']),
+    summer: bucketToRegionData(regionSeasonAgg['summer']),
+    fall: bucketToRegionData(regionSeasonAgg['fall']),
+    winter: bucketToRegionData(regionSeasonAgg['winter']),
+    all: bucketToRegionData(regionSeasonAgg['all']),
+  }
+
   const summary = plantingSummaryRes.data as { total_planted: number; total_defect: number; high_risk_species: number; mid_risk_species: number; low_risk_species: number } | null
   const totalPlanted = summary?.total_planted ?? plantings.reduce((s, p) => s + (p.quantity_planted ?? 0), 0)
   const totalPlantDefect = summary?.total_defect ?? plantings.reduce((s, p) => {
@@ -319,6 +391,7 @@ export default async function SimulationPage() {
     totalPlanted, totalPlantDefect, overallRate,
     hasPlantingAnalysis: plantings.length > 0,
     geoRegions,
+    seasonRegionData,
   }
 
   return (

@@ -8,6 +8,7 @@ import {
 } from '../analytics/charts'
 import { SiteAnalysisTable } from '../analytics/site-analysis-table'
 import { SpeciesStatsTab } from '../species/species-stats-tab'
+import type { RegionData } from './korea-map'
 import { Leaf, TrendingDown, AlertTriangle, Calculator } from 'lucide-react'
 
 type GeoRegion = {
@@ -33,6 +34,8 @@ export type AnalyticsProps = {
   hasPlantingAnalysis: boolean
   /** 서버에서 파싱한 한국 지도 SVG path 데이터 */
   geoRegions: GeoRegion[]
+  /** 계절(식재계절) × 지역 실데이터 집계. 키: spring/summer/fall/winter/all */
+  seasonRegionData: Record<string, RegionData[]>
 }
 
 export function AnalyticsContent({
