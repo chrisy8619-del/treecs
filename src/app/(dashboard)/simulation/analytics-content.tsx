@@ -36,6 +36,8 @@ export type AnalyticsProps = {
   geoRegions: GeoRegion[]
   /** 계절(식재계절) × 지역 실데이터 집계. 키: spring/summer/fall/winter/all */
   seasonRegionData: Record<string, RegionData[]>
+  /** 계절별 식재 전략 통계 (수종 수·하자율·고위험 수종). 키: spring/summer/fall/winter */
+  seasonStrategyStats: Record<string, { speciesCount: number; defectRate: number; highRiskSpecies: string[] }>
 }
 
 export function AnalyticsContent({

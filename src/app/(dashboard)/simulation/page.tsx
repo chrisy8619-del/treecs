@@ -375,6 +375,51 @@ export default async function SimulationPage() {
     all: bucketToRegionData(regionSeasonAgg['all']),
   }
 
+  // 계절별 수종 통계 (우측 식재 전략 칩: 추천 수종 수·예상 하자율·고위험 수종)
+  // 계절 기준은 좌측 계절별 차트·지도와 동일(planting_season 우선, 식재일 폴백)
+  type SeasonSpeciesBucket = Map<string, { qty: number; defectQty: number }>
+  const seasonSpeciesAgg: Record<string, SeasonSpeciesBucket> = {}
+  for (const p of plantings) {
+    const sp = Array.isArray(p.species) ? p.species[0] : p.species
+    const spName = (sp as { species_name_ko?: string } | null)?.species_name_ko
+    if (!spName) continue
+    const qty = safeNumZero(p.quantity_planted)
+    if (qty <= 0) continue
+    const rate = p.expected_defect_rate
+    const defectQty = safeNumZero(p.expected_defect_qty) || (rate != null ? Math.round(qty * rate) : 0)
+    const seasonKo = (p as unknown as Record<string, string | null>)['planting_season']
+      ? SEASON_CODE_TO_KO[(p as unknown as Record<string, string>)['planting_season']]
+      : null
+    const season = resolveSeasonCode(seasonKo, p.planting_date)
+    if (!season) continue
+    if (!seasonSpeciesAgg[season]) seasonSpeciesAgg[season] = new Map()
+    const m = seasonSpeciesAgg[season]
+    const prev = m.get(spName) ?? { qty: 0, defectQty: 0 }
+    m.set(spName, { qty: prev.qty + qty, defectQty: prev.defectQty + defectQty })
+  }
+
+  // 베이지안 보정 상수는 위 speciesAvgRate 계산과 동일 (DEFAULT_AVG=0.15, SAMPLE=30)
+  const seasonStrategyStats: Record<string, { speciesCount: number; defectRate: number; highRiskSpecies: string[] }> = {}
+  for (const season of SEASON_ORDER) {
+    const m = seasonSpeciesAgg[season]
+    if (!m) { seasonStrategyStats[season] = { speciesCount: 0, defectRate: 0, highRiskSpecies: [] }; continue }
+    let totalQty = 0, totalDefect = 0
+    const highRisk: { name: string; rate: number }[] = []
+    for (const [name, v] of m) {
+      totalQty += v.qty
+      totalDefect += v.defectQty
+      // 수종별 베이지안 보정 하자율로 고위험(>=20%) 판정
+      const adj = (v.defectQty + BAYESIAN_AVG * BAYESIAN_SAMPLE) / (v.qty + BAYESIAN_SAMPLE)
+      if (adj >= 0.20) highRisk.push({ name, rate: adj })
+    }
+    highRisk.sort((a, b) => b.rate - a.rate)
+    seasonStrategyStats[season] = {
+      speciesCount: m.size,
+      defectRate: totalQty > 0 ? totalDefect / totalQty : 0,
+      highRiskSpecies: highRisk.slice(0, 3).map((s) => s.name),
+    }
+  }
+
   const summary = plantingSummaryRes.data as { total_planted: number; total_defect: number; high_risk_species: number; mid_risk_species: number; low_risk_species: number } | null
   const totalPlanted = summary?.total_planted ?? plantings.reduce((s, p) => s + (p.quantity_planted ?? 0), 0)
   const totalPlantDefect = summary?.total_defect ?? plantings.reduce((s, p) => {
@@ -392,6 +437,7 @@ export default async function SimulationPage() {
     hasPlantingAnalysis: plantings.length > 0,
     geoRegions,
     seasonRegionData,
+    seasonStrategyStats,
   }
 
   return (

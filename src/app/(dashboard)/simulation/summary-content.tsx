@@ -150,12 +150,13 @@ type SummaryProps = {
   contractorData: AnalyticsProps['contractorData']
   seasonData: AnalyticsProps['seasonData']
   seasonRegionData: AnalyticsProps['seasonRegionData']
+  seasonStrategyStats: AnalyticsProps['seasonStrategyStats']
 }
 
 export function SummaryContent({
   geoRegions, totalPlanted, totalPlantDefect, overallRate,
   totalReserveCost, yearlyData, speciesData, contractorData, seasonData,
-  seasonRegionData,
+  seasonRegionData, seasonStrategyStats,
 }: SummaryProps) {
   const [activeSeason, setActiveSeason] = useState<SeasonKey>('spring')
   const seasonMeta = SEASON_META[activeSeason]
@@ -163,6 +164,22 @@ export function SummaryContent({
   const realRegionData = seasonRegionData?.[activeSeason] ?? []
   const hasRealRegionData = realRegionData.length > 0
   const regionData = hasRealRegionData ? realRegionData : SEASON_REGION_DATA[activeSeason]
+
+  // 우측 식재 전략 칩: 계절별 실데이터 (없으면 더미 SEASON_META fallback)
+  const strategyStat = seasonStrategyStats?.[activeSeason]
+  const hasStrategyData = !!strategyStat && strategyStat.speciesCount > 0
+  // 예상 하자율(%) — 좌측 "계절별 하자율" 차트(seasonData)와 동일 출처로 맞춰 값 일치 보장
+  const seasonChartItem = seasonData.find((s) => s.label === activeSeason)
+  const strategyDefectRate = seasonChartItem != null
+    ? seasonChartItem.defect_rate * 100
+    : hasStrategyData ? strategyStat.defectRate * 100 : seasonMeta.defect_rate
+  const strategySpeciesCount = hasStrategyData ? strategyStat.speciesCount : seasonMeta.speciesCount
+  // 권고 배너: 계절별 고위험 수종 기반 동적 문구 (없으면 더미 advice)
+  const strategyAdvice = hasStrategyData && strategyStat.highRiskSpecies.length > 0
+    ? `${strategyStat.highRiskSpecies.join('·')} 등 고위험 수종을 내성 수종으로 대체 검토 권장`
+    : hasStrategyData
+    ? '해당 계절 고위험 수종 없음 — 현행 식재 계획 유지 가능'
+    : seasonMeta.advice
 
   // 실제 데이터 있으면 우선 사용, 없으면 더미
   const displayPlanted    = totalPlanted > 0 ? totalPlanted : 113970
@@ -440,7 +457,7 @@ export function SummaryContent({
           {/* 권고 배너 */}
           <div className="flex items-start gap-1.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-3 py-2.5 mb-3 text-xs text-[#374151]">
             <span className="text-sm shrink-0">✦</span>
-            <span><span className="font-semibold">{seasonMeta.label}철 권고:</span> {seasonMeta.advice}</span>
+            <span><span className="font-semibold">{seasonMeta.label}철 권고:</span> {strategyAdvice}</span>
           </div>
 
           {/* 계절 탭 */}
@@ -467,22 +484,22 @@ export function SummaryContent({
             <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5">
               <span className="text-base">🌿</span>
               <div>
-                <p className="text-[10px] text-[#9CA3AF]">추천 수종</p>
-                <p className="text-sm font-bold text-[#111827]">{seasonMeta.speciesCount}종</p>
+                <p className="text-[10px] text-[#9CA3AF]">식재 수종</p>
+                <p className="text-sm font-bold text-[#111827]">{strategySpeciesCount}종</p>
               </div>
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] px-2.5 py-1.5">
               <span className="text-base">📊</span>
               <div>
                 <p className="text-[10px] text-[#9CA3AF]">예상 하자율</p>
-                <p className={`text-sm font-bold ${seasonMeta.defect_rate >= 15 ? 'text-[#EF4444]' : seasonMeta.defect_rate >= 12 ? 'text-[#F59E0B]' : 'text-[#16A34A]'}`}>
-                  {seasonMeta.defect_rate}%
+                <p className={`text-sm font-bold ${strategyDefectRate >= 20 ? 'text-[#EF4444]' : strategyDefectRate >= 10 ? 'text-[#F59E0B]' : 'text-[#16A34A]'}`}>
+                  {strategyDefectRate.toFixed(2)}%
                   <span className={`ml-1 text-[9px] font-medium px-1 py-0.5 rounded-full ${
-                    seasonMeta.defect_rate >= 15 ? 'bg-[#FEE2E2] text-[#DC2626]'
-                    : seasonMeta.defect_rate >= 12 ? 'bg-[#FEF3C7] text-[#D97706]'
+                    strategyDefectRate >= 20 ? 'bg-[#FEE2E2] text-[#DC2626]'
+                    : strategyDefectRate >= 10 ? 'bg-[#FEF3C7] text-[#D97706]'
                     : 'bg-[#DCFCE7] text-[#166634]'
                   }`}>
-                    {seasonMeta.defect_rate >= 15 ? '높음' : seasonMeta.defect_rate >= 12 ? '중간' : '낮음'}
+                    {strategyDefectRate >= 20 ? '높음' : strategyDefectRate >= 10 ? '중간' : '낮음'}
                   </span>
                 </p>
               </div>
