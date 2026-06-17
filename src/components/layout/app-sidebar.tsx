@@ -102,12 +102,11 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <form action={logout} className="w-full">
-              <button type="submit" className="w-full">
-                <SidebarMenuButton tooltip="로그아웃">
-                  <LogOut />
-                  <span>로그아웃</span>
-                </SidebarMenuButton>
-              </button>
+              {/* SidebarMenuButton 자체를 submit 버튼으로 렌더 (별도 <button>으로 감싸면 button-in-button → hydration #418) */}
+              <SidebarMenuButton tooltip="로그아웃" render={<button type="submit" className="w-full" />}>
+                <LogOut />
+                <span>로그아웃</span>
+              </SidebarMenuButton>
             </form>
           </SidebarMenuItem>
         </SidebarMenu>
