@@ -8,7 +8,7 @@ import {
 } from 'recharts'
 import { Leaf, TrendingDown, AlertTriangle, Calculator, Sparkles } from 'lucide-react'
 import type { AnalyticsProps } from './analytics-content'
-import { calcAdjustedRate, getFinalRisk } from '../species/species-stats-tab'
+import { calcAdjustedRate, getFinalRisk, DEFAULT_MIN_PLANTING } from '../species/species-stats-tab'
 
 type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
 
@@ -194,21 +194,26 @@ export function SummaryContent({
   // 리스크 현황 — 수종 관리(수목 현황) 탭과 동일한 보정 하자율 + 표본 신뢰도 기준
   // 위험/주의/보통/양호 4단계를 요약 칩 3단계(고/중/저위험)로 매핑:
   //   위험→고위험, 주의→중위험, 보통+양호→저위험 (표본부족/참고는 칩 집계에서 제외)
-  const speciesAdjusted = speciesData.map((s) => {
-    const adjustedRate = calcAdjustedRate(s.defect, s.inspected)
-    return { ...s, adjustedRate, finalRisk: getFinalRisk(s.inspected, adjustedRate) }
-  })
+  // 수종 관리(수목 현황) 화면과 동일 모집단을 쓰도록 최소 식재량(DEFAULT_MIN_PLANTING) 이상만 집계
+  const speciesAdjusted = speciesData
+    .filter((s) => s.inspected >= DEFAULT_MIN_PLANTING)
+    .map((s) => {
+      const adjustedRate = calcAdjustedRate(s.defect, s.inspected)
+      return { ...s, adjustedRate, finalRisk: getFinalRisk(s.inspected, adjustedRate) }
+    })
 
-  const riskHigh = speciesData.length > 0 ? speciesAdjusted.filter((s) => s.finalRisk === '위험').length : 27
-  const riskMid  = speciesData.length > 0 ? speciesAdjusted.filter((s) => s.finalRisk === '주의').length : 29
-  const riskLow  = speciesData.length > 0 ? speciesAdjusted.filter((s) => s.finalRisk === '보통' || s.finalRisk === '양호').length : 49
+  const hasSpeciesData = speciesAdjusted.length > 0
+  const riskHigh = hasSpeciesData ? speciesAdjusted.filter((s) => s.finalRisk === '위험').length : 27
+  const riskMid  = hasSpeciesData ? speciesAdjusted.filter((s) => s.finalRisk === '주의').length : 29
+  const riskLow  = hasSpeciesData ? speciesAdjusted.filter((s) => s.finalRisk === '보통' || s.finalRisk === '양호').length : 49
 
   const displayContractors = contractorData.length > 0
     ? contractorData.slice(0, 10).map((d) => ({ name: d.name, rate: d.defect_rate }))
     : CONTRACTOR_TOP10
 
-  // TOP5 — 수종 관리와 동일하게 보정 하자율 내림차순 (표본부족/참고 제외)
-  const displayRiskTop5 = speciesData.length > 0
+  // TOP5 — 수종 관리(수목 현황)와 동일 모집단(DEFAULT_MIN_PLANTING 이상, speciesAdjusted에 이미 반영) 기준
+  // 식재량 필터가 없으면 소량·고하자율 수종(예: 오죽)이 TOP5에만 노출되어 수종 관리 화면과 1위가 달라짐
+  const displayRiskTop5 = hasSpeciesData
     ? speciesAdjusted
         .filter((s) => s.finalRisk !== '표본부족' && s.finalRisk !== '참고')
         .sort((a, b) => b.adjustedRate - a.adjustedRate)

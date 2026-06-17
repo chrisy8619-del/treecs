@@ -15,7 +15,7 @@ import {
 // ─── 상수 (추후 관리자 설정으로 확장 가능) ───────────────────────
 export const DEFAULT_AVG_DEFECT_RATE = 0.15
 export const DEFAULT_SAMPLE_SIZE = 30
-const DEFAULT_MIN_PLANTING = 210
+export const DEFAULT_MIN_PLANTING = 210
 
 // ─── 타입 ─────────────────────────────────────────────────────────
 export type SpeciesStat = {
