@@ -405,7 +405,7 @@ export function SummaryContent({
                 <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 25]} />
                 <Tooltip formatter={(v) => [`${v}%`, '하자율']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Area type="monotone" dataKey="rate" stroke="#14532D" strokeWidth={2} fill="url(#summaryAreaGrad)" dot={{ fill: '#14532D', r: 3 }} />
+                <Area type="monotone" dataKey="rate" stroke="#14532D" strokeWidth={2} fill="url(#summaryAreaGrad)" dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

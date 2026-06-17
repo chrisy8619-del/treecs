@@ -164,7 +164,7 @@ export default async function SimulationPage() {
   type YearlyRpcRow = { year: number; total_quantity: number; total_defect_quantity: number; defect_rate: number }
   const currentYear = new Date().getFullYear()
   const yearlyData = ((yearlyRes.data as YearlyRpcRow[] | null) ?? [])
-    .filter((d) => d.year >= 2022 && d.year <= currentYear)
+    .filter((d) => d.year >= 2023 && d.year <= currentYear)
     .sort((a, b) => a.year - b.year)
     .map((d) => ({ year: d.year, defect_rate: d.defect_rate ?? 0, total_quantity: d.total_quantity, total_defect_quantity: d.total_defect_quantity }))
 
