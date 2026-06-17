@@ -254,12 +254,17 @@ export function SummaryContent({
       bestImprovedRate.set(s.original_species_name, s.improved_defect_rate)
     }
   }
-  // 수종별 개선 후 하자수량 합산 (대체 적용 시 하자율이 낮아지는 경우만 반영)
+  // 수종별 개선 후 하자수량 합산
+  // 시뮬레이터 '고위험 대체 수종 일괄 적용'과 동일 기준: 보정 하자율 ≥ 20%(고위험) 수종만 대체 적용.
+  // 그 외 수종은 현행 유지(절감 0). 대체 적용 시 하자율이 낮아지는 경우만 반영.
+  const HIGH_RISK_THRESHOLD = 0.20
   let improvedDefectTotal = 0
   for (const s of speciesData) {
     const currentRate = s.inspected > 0 ? s.defect / s.inspected : 0
+    const adjustedRate = calcAdjustedRate(s.defect, s.inspected)
     const improved = bestImprovedRate.get(s.name)
-    const appliedRate = improved != null && improved < currentRate ? improved : currentRate
+    const applyReplacement = adjustedRate >= HIGH_RISK_THRESHOLD && improved != null && improved < currentRate
+    const appliedRate = applyReplacement ? improved : currentRate
     improvedDefectTotal += Math.round(s.inspected * appliedRate)
   }
   const realSavedQty = Math.max(0, displayDefect - improvedDefectTotal)
