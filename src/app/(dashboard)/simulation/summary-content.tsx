@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import { Leaf, TrendingDown, AlertTriangle, Calculator, Sparkles } from 'lucide-react'
 import type { AnalyticsProps } from './analytics-content'
+import type { SubstitutionMap } from './simulation-client'
 import { calcAdjustedRate, getFinalRisk, DEFAULT_MIN_PLANTING } from '../species/species-stats-tab'
 
 type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
@@ -151,12 +152,13 @@ type SummaryProps = {
   seasonData: AnalyticsProps['seasonData']
   seasonRegionData: AnalyticsProps['seasonRegionData']
   seasonStrategyStats: AnalyticsProps['seasonStrategyStats']
+  substitutions: SubstitutionMap[]
 }
 
 export function SummaryContent({
   geoRegions, totalPlanted, totalPlantDefect, overallRate,
   totalReserveCost, yearlyData, speciesData, contractorData, seasonData,
-  seasonRegionData, seasonStrategyStats,
+  seasonRegionData, seasonStrategyStats, substitutions,
 }: SummaryProps) {
   const [activeSeason, setActiveSeason] = useState<SeasonKey>('spring')
   const seasonMeta = SEASON_META[activeSeason]
@@ -240,12 +242,35 @@ export function SummaryContent({
         { label: '겨울', rate: 20.49 },
       ]
 
-  // 절감 카드 — 실데이터 기반 동적 계산, 없으면 더미 fallback
+  // 절감 카드 — 시뮬레이터와 동일 원리의 실데이터 기반 계산:
+  // 대체 수종이 등록된 수종은 최선(최저) 개선 하자율로 대체했다고 가정하고 하자수량 감소분을 합산.
+  // 대체 후보가 없거나 개선 효과가 없는 수종은 현행 하자수량 유지(절감 0).
   const hasRealData = totalPlantDefect > 0
-  const SAVING_RATIO = 0.294
-  const displaySavedQty = hasRealData ? Math.round(displayDefect * SAVING_RATIO) : 4823
+  // 원수종명 → 최선 개선 하자율(최저값) 맵
+  const bestImprovedRate = new Map<string, number>()
+  for (const s of substitutions) {
+    const cur = bestImprovedRate.get(s.original_species_name)
+    if (cur == null || s.improved_defect_rate < cur) {
+      bestImprovedRate.set(s.original_species_name, s.improved_defect_rate)
+    }
+  }
+  // 수종별 개선 후 하자수량 합산 (대체 적용 시 하자율이 낮아지는 경우만 반영)
+  let improvedDefectTotal = 0
+  for (const s of speciesData) {
+    const currentRate = s.inspected > 0 ? s.defect / s.inspected : 0
+    const improved = bestImprovedRate.get(s.name)
+    const appliedRate = improved != null && improved < currentRate ? improved : currentRate
+    improvedDefectTotal += Math.round(s.inspected * appliedRate)
+  }
+  const realSavedQty = Math.max(0, displayDefect - improvedDefectTotal)
+  const hasSavingData = hasRealData && speciesData.length > 0 && realSavedQty > 0
+
+  // 실데이터 절감분 우선, 데이터/효과 없으면 더미 fallback
+  const displaySavedQty = hasSavingData ? realSavedQty : hasRealData ? 0 : 4823
   const displayAfterQty = hasRealData ? displayDefect - displaySavedQty : 11564
-  const displaySavingPct = (SAVING_RATIO * 100).toFixed(1)
+  const displaySavingPct = displayDefect > 0
+    ? ((displaySavedQty / displayDefect) * 100).toFixed(1)
+    : '29.4'
 
   // AI 권고 액션 — 실데이터 기반 동적 문자열
   const topRiskNames = displayRiskTop5.slice(0, 2).map((s) => s.name).join('·')
@@ -316,7 +341,16 @@ export function SummaryContent({
               </div>
             </div>
             <p className="mt-3 text-center text-sm font-semibold text-[#14532D]">
-              ↓ 절감분 {displaySavedQty.toLocaleString()}주 ({displaySavingPct}%){hasRealData && <span className="text-[10px] font-normal text-[#6B7280] ml-1">(AI 예측 기준)</span>}
+              {hasRealData && !hasSavingData ? (
+                <span className="text-xs font-normal text-[#6B7280]">등록된 대체 수종이 없어 절감 효과를 산출할 수 없습니다</span>
+              ) : (
+                <>
+                  ↓ 절감분 {displaySavedQty.toLocaleString()}주 ({displaySavingPct}%)
+                  <span className="text-[10px] font-normal text-[#6B7280] ml-1">
+                    {hasRealData ? '(대체 수종 적용 기준)' : '(예시 데이터)'}
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>
