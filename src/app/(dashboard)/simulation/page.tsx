@@ -213,15 +213,16 @@ export default async function SimulationPage() {
     .map(([name, seasons]) => {
       const totalQty = Object.values(seasons).reduce((s, v) => s + v.qty, 0)
       const totalDefect = Object.values(seasons).reduce((s, v) => s + v.defectQty, 0)
-      const avgRate = totalQty > 0 ? totalDefect / totalQty : 0
+      const avgRate = adjustedRate(totalDefect, totalQty)
       const seasonRates: Record<string, number | null> = {}
       for (const k of SEASON_ORDER) {
         const b = seasons[k]
-        seasonRates[k] = b && b.qty > 0 ? b.defectQty / b.qty : null
+        seasonRates[k] = b && b.qty > 0 ? adjustedRate(b.defectQty, b.qty) : null
       }
       return { name, avgRate, inspected: totalQty, ...seasonRates } as HeatmapData
     })
-    .filter((d) => d.avgRate > 0)
+    // 보정 후 avgRate는 항상 0보다 크므로, "데이터 있는 수종만" 의도는 inspected(점검 수량) 기준으로 판정한다.
+    .filter((d) => (d.inspected ?? 0) > 0)
     .sort((a, b) => b.avgRate - a.avgRate)
     .slice(0, 20)
 
@@ -411,7 +412,7 @@ export default async function SimulationPage() {
     highRisk.sort((a, b) => b.rate - a.rate)
     seasonStrategyStats[season] = {
       speciesCount: m.size,
-      defectRate: totalQty > 0 ? totalDefect / totalQty : 0,
+      defectRate: adjustedRate(totalDefect, totalQty),
       highRiskSpecies: highRisk.slice(0, 3).map((s) => s.name),
     }
   }
