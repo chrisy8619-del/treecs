@@ -7,7 +7,7 @@ export type RegionData = {
   region_key: string
   /** 한국어 표시명 */
   label: string
-  /** 하자율 0~1 */
+  /** 하자율 0~1 (베이지안 보정값) */
   defect_rate: number
   /** 예상 하자 수량 */
   defect_qty?: number
@@ -15,6 +15,8 @@ export type RegionData = {
   planted_qty?: number
   /** 추천 수종 배열 */
   top_species?: string[]
+  /** 원시 표본 부족 여부(보정값 신뢰도 낮음) */
+  lowSample?: boolean
 }
 
 type GeoRegion = {

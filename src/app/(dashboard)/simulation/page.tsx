@@ -347,17 +347,18 @@ export default async function SimulationPage() {
     if (!m) return []
     return [...m.entries()].map(([regionKey, b]) => {
       const topSpecies = [...b.species.entries()]
-        .map(([name, sv]) => ({ name, rate: sv.qty > 0 ? sv.defectQty / sv.qty : 0 }))
+        .map(([name, sv]) => ({ name, rate: adjustedRate(sv.defectQty, sv.qty) }))
         .sort((a, b2) => b2.rate - a.rate)
         .slice(0, 2)
         .map((s) => s.name)
       return {
         region_key: regionKey,
         label: REGION_KEY_TO_KO[regionKey] ?? regionKey,
-        defect_rate: b.qty > 0 ? b.defectQty / b.qty : 0,
+        defect_rate: adjustedRate(b.defectQty, b.qty),
         defect_qty: b.defectQty,
         planted_qty: b.qty,
         top_species: topSpecies,
+        lowSample: isLowSample(b.qty),
       }
     })
   }
