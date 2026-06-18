@@ -7,6 +7,7 @@ import { type SiteOption, type SubstitutionMap, type AltSpeciesRec } from './sim
 import { type AnalyticsProps } from './analytics-content'
 import { resolveSeasonCode, safeNumZero, SEASON_ORDER, SEASON_CODE_TO_KO } from '@/lib/season-utils'
 import { regionToKey, REGION_KEY_TO_KO } from '@/lib/region-utils'
+import { adjustedRate, isLowSample } from '@/lib/defect-rate'
 import type { SiteReserveData, HeatmapData } from '../analytics/charts'
 import type { RegionData } from './korea-map'
 
@@ -98,16 +99,10 @@ export default async function SimulationPage() {
       defect: prev.defect + (row.expected_defect_qty ?? 0),
     })
   }
-  // 베이지안 보정: 소표본 수종의 하자율 과대/과소 추정 완화
-  // species-stats-tab.tsx와 동일한 상수 사용 (DEFAULT_AVG=0.15, DEFAULT_SAMPLE=30)
-  const BAYESIAN_AVG = 0.15
-  const BAYESIAN_SAMPLE = 30
+  // 베이지안 보정: 소표본 수종의 하자율 과대/과소 추정 완화 (공통 유틸 @/lib/defect-rate)
   const speciesAvgRate: Record<string, number> = {}
   for (const [name, v] of aggMap) {
-    speciesAvgRate[name] =
-      v.qty > 0
-        ? (v.defect + BAYESIAN_AVG * BAYESIAN_SAMPLE) / (v.qty + BAYESIAN_SAMPLE)
-        : BAYESIAN_AVG
+    speciesAvgRate[name] = adjustedRate(v.defect, v.qty)
   }
 
   const altRecs: AltSpeciesRec[] = (altRecsRaw ?? []).map((r) => ({
@@ -398,7 +393,7 @@ export default async function SimulationPage() {
     m.set(spName, { qty: prev.qty + qty, defectQty: prev.defectQty + defectQty })
   }
 
-  // 베이지안 보정 상수는 위 speciesAvgRate 계산과 동일 (DEFAULT_AVG=0.15, SAMPLE=30)
+  // 수종별 베이지안 보정 하자율은 공통 유틸(@/lib/defect-rate)로 산출한다.
   const seasonStrategyStats: Record<string, { speciesCount: number; defectRate: number; highRiskSpecies: string[] }> = {}
   for (const season of SEASON_ORDER) {
     const m = seasonSpeciesAgg[season]
@@ -409,7 +404,7 @@ export default async function SimulationPage() {
       totalQty += v.qty
       totalDefect += v.defectQty
       // 수종별 베이지안 보정 하자율로 고위험(>=20%) 판정
-      const adj = (v.defectQty + BAYESIAN_AVG * BAYESIAN_SAMPLE) / (v.qty + BAYESIAN_SAMPLE)
+      const adj = adjustedRate(v.defectQty, v.qty)
       if (adj >= 0.20) highRisk.push({ name, rate: adj })
     }
     highRisk.sort((a, b) => b.rate - a.rate)
