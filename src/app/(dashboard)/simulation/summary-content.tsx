@@ -9,7 +9,8 @@ import {
 import { Leaf, TrendingDown, AlertTriangle, Calculator, Sparkles } from 'lucide-react'
 import type { AnalyticsProps } from './analytics-content'
 import type { SubstitutionMap } from './simulation-client'
-import { calcAdjustedRate, getFinalRisk, DEFAULT_MIN_PLANTING } from '../species/species-stats-tab'
+import { getFinalRisk, DEFAULT_MIN_PLANTING } from '../species/species-stats-tab'
+import { adjustedRate } from '@/lib/defect-rate'
 
 type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
 
@@ -200,8 +201,8 @@ export function SummaryContent({
   const speciesAdjusted = speciesData
     .filter((s) => s.inspected >= DEFAULT_MIN_PLANTING)
     .map((s) => {
-      const adjustedRate = calcAdjustedRate(s.defect, s.inspected)
-      return { ...s, adjustedRate, finalRisk: getFinalRisk(s.inspected, adjustedRate) }
+      const adjRate = adjustedRate(s.defect, s.inspected)
+      return { ...s, adjustedRate: adjRate, finalRisk: getFinalRisk(s.inspected, adjRate) }
     })
 
   const hasSpeciesData = speciesAdjusted.length > 0
@@ -261,9 +262,9 @@ export function SummaryContent({
   let improvedDefectTotal = 0
   for (const s of speciesData) {
     const currentRate = s.inspected > 0 ? s.defect / s.inspected : 0
-    const adjustedRate = calcAdjustedRate(s.defect, s.inspected)
+    const adjRate = adjustedRate(s.defect, s.inspected)
     const improved = bestImprovedRate.get(s.name)
-    const applyReplacement = adjustedRate >= HIGH_RISK_THRESHOLD && improved != null && improved < currentRate
+    const applyReplacement = adjRate >= HIGH_RISK_THRESHOLD && improved != null && improved < currentRate
     const appliedRate = applyReplacement ? improved : currentRate
     improvedDefectTotal += Math.round(s.inspected * appliedRate)
   }
