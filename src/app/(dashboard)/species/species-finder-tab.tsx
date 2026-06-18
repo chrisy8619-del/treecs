@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Leaf, Star, Search } from 'lucide-react'
+import { adjustedRate } from '@/lib/defect-rate'
 
 // ─── 타입 ───────────────────────────────────────────────────────────
 export type AltSpeciesRec = {
@@ -114,12 +115,8 @@ function matchPurpose(type: string, purpose: Purpose): boolean {
   return true
 }
 
-// 하자율 기반 보정
+// 하자율 보정은 공통 유틸(@/lib/defect-rate)의 adjustedRate를 사용한다.
 const DEFAULT_AVG = 0.15
-const DEFAULT_SAMPLE = 30
-function calcAdjustedRate(defectQty: number, totalQty: number): number {
-  return (defectQty + DEFAULT_AVG * DEFAULT_SAMPLE) / (totalQty + DEFAULT_SAMPLE)
-}
 
 // 순위 배지 색상
 function rankBadgeClass(rank: number): string {
@@ -192,14 +189,14 @@ export function SpeciesFinderTab({ altRecs, speciesStats }: Props) {
       const stat = statsMap.get(name)
       const qty = stat?.totalQty ?? 0
       const defectQty = stat ? Math.round(stat.defectRate * stat.totalQty) : 0
-      const adjustedRate = stat ? calcAdjustedRate(defectQty, qty) : DEFAULT_AVG
+      const adjusted = stat ? adjustedRate(defectQty, qty) : DEFAULT_AVG
       const defectRate = stat?.defectRate ?? DEFAULT_AVG
       return {
         name,
         type: SPECIES_TYPE_MAP[name] ?? '기타',
         avgQty: Math.round(qty / Math.max(1, speciesStats.filter((s) => s.speciesNameKo === name).length)),
         defectRate,
-        adjustedRate,
+        adjustedRate: adjusted,
         score,
         isTopPick: false,
       }
