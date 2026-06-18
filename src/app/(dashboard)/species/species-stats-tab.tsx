@@ -11,10 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { PRIOR_RATE, PRIOR_STRENGTH, adjustedRate } from '@/lib/defect-rate'
 
 // ─── 상수 (추후 관리자 설정으로 확장 가능) ───────────────────────
-export const DEFAULT_AVG_DEFECT_RATE = 0.15
-export const DEFAULT_SAMPLE_SIZE = 30
+// 보정 상수·공식은 공통 유틸(@/lib/defect-rate)로 일원화됨. 외부 export 이름은 호환을 위해 유지.
+export const DEFAULT_AVG_DEFECT_RATE = PRIOR_RATE
+export const DEFAULT_SAMPLE_SIZE = PRIOR_STRENGTH
 export const DEFAULT_MIN_PLANTING = 210
 
 // ─── 타입 ─────────────────────────────────────────────────────────
@@ -29,12 +31,9 @@ export type SpeciesStat = {
 export type RiskLevel = '위험' | '주의' | '보통' | '양호' | '표본부족' | '참고'
 type FilterValue = '전체' | '위험' | '주의' | '보통' | '양호' | '표본부족'
 
-// ─── 보정 하자율 계산 ──────────────────────────────────────────────
+// ─── 보정 하자율 계산 (공통 유틸로 위임) ───────────────────────────
 export function calcAdjustedRate(defectQty: number, totalQty: number): number {
-  return (
-    (defectQty + DEFAULT_AVG_DEFECT_RATE * DEFAULT_SAMPLE_SIZE) /
-    (totalQty + DEFAULT_SAMPLE_SIZE)
-  )
+  return adjustedRate(defectQty, totalQty)
 }
 
 // ─── 신뢰도 분류 ───────────────────────────────────────────────────
