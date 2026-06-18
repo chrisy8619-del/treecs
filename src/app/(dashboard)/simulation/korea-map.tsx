@@ -139,7 +139,7 @@ export function KoreaMap({ geoRegions, regionData, width = 300, height = 400 }: 
                   fill={textColor}
                   style={{ pointerEvents: 'none', userSelect: 'none' }}
                 >
-                  {(rate * 100).toFixed(1)}%
+                  {(rate * 100).toFixed(1)}%{data.lowSample ? ' *' : ''}
                 </text>
               )}
             </g>
@@ -178,6 +178,9 @@ export function KoreaMap({ geoRegions, regionData, width = 300, height = 400 }: 
             <p className="text-[#6B7280] mt-1">
               추천: {tooltip.region.top_species.join(' · ')}
             </p>
+          )}
+          {tooltip.region.lowSample && (
+            <p className="text-[#9CA3AF] mt-1 text-[10px]">* 표본 부족(보정 추정값)</p>
           )}
         </div>
       )}
