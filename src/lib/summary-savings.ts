@@ -28,7 +28,6 @@ export type ScenarioResult = {
 export type ScenarioSet = Record<ScenarioKey, ScenarioResult>
 
 type SpeciesRow = { name: string; inspected: number; defect: number }
-type Sub = { original_species_name: string; improved_defect_rate: number }
 
 /** 고위험 임계치(보정율). */
 const HIGH = 0.20
@@ -36,29 +35,21 @@ const HIGH = 0.20
 const MID = 0.10
 
 /**
- * 수종별 식재 집계와 대체쌍 목록으로 3개 절감 시나리오를 계산한다.
+ * 수종별 식재 집계와 개선율 맵으로 3개 절감 시나리오를 계산한다.
  * @param speciesData 전체 현장 수종 합산 ({ name, inspected, defect }).
- * @param substitutions species_substitutions(원수종→대체수종, 개선 하자율) 목록.
+ * @param improvedRateMap 원수종명 → 최선(최저) 개선 하자율. page.tsx에서
+ *   alternative_species_recommendations + speciesAvgRate로 사전 집계한 값.
  */
 export function computeSavingsScenarios(
   speciesData: SpeciesRow[],
-  substitutions: Sub[],
+  improvedRateMap: Record<string, number>,
 ): ScenarioSet {
-  // 원수종별 최선(최저) 개선 하자율 맵
-  const best = new Map<string, number>()
-  for (const s of substitutions) {
-    const cur = best.get(s.original_species_name)
-    if (cur == null || s.improved_defect_rate < cur) {
-      best.set(s.original_species_name, s.improved_defect_rate)
-    }
-  }
-
   // baseline: 전 수종 보정율 기준 하자량 합 (시나리오 공통)
   let baselineDefect = 0
   const rows = speciesData.map((s) => {
     const adj = adjustedRate(s.defect, s.inspected)
     baselineDefect += Math.round(s.inspected * adj)
-    return { inspected: s.inspected, adj, improved: best.get(s.name) ?? null }
+    return { inspected: s.inspected, adj, improved: improvedRateMap[s.name] ?? null }
   })
 
   // 시나리오 자격(eligible)에 따라 대체 적용 후 하자량을 산출

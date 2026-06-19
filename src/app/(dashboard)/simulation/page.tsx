@@ -114,6 +114,22 @@ export default async function SimulationPage() {
     substitute3: r.substitute3 ?? null,
   }))
 
+  // 요약 절감 카드용: 원수종명 → 최선(최저) 개선 하자율 맵.
+  // 시뮬레이터와 동일 소스(alternative_species_recommendations + speciesAvgRate)를 쓰되,
+  // 요약은 전체 현장 합산이라 지역·계절 정보가 없으므로 수종 단위로 전체 병합한다.
+  // 점검 이력 없는 대체수종(speciesAvgRate에 없음)은 과대 절감 방지를 위해 후보에서 제외한다.
+  const speciesImprovedRate: Record<string, number> = {}
+  for (const rec of altRecs) {
+    const candidates = [rec.substitute1, rec.substitute2, rec.substitute3]
+      .filter((s): s is string => !!s && s !== rec.species_name)
+    for (const cand of candidates) {
+      const rate = speciesAvgRate[cand]
+      if (rate == null) continue
+      const cur = speciesImprovedRate[rec.species_name]
+      if (cur == null || rate < cur) speciesImprovedRate[rec.species_name] = rate
+    }
+  }
+
   // ── 지도 데이터 ──
   const geoRegions = await loadGeoRegions()
 
@@ -442,6 +458,7 @@ export default async function SimulationPage() {
       sites={sites}
       substitutions={substitutions}
       speciesAvgRate={speciesAvgRate}
+      speciesImprovedRate={speciesImprovedRate}
       altRecs={altRecs}
       analytics={analytics}
     />

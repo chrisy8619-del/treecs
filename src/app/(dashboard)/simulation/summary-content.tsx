@@ -8,7 +8,6 @@ import {
 } from 'recharts'
 import { Leaf, TrendingDown, AlertTriangle, Calculator, Sparkles } from 'lucide-react'
 import type { AnalyticsProps } from './analytics-content'
-import type { SubstitutionMap } from './simulation-client'
 import { getFinalRisk, DEFAULT_MIN_PLANTING } from '../species/species-stats-tab'
 import { adjustedRate } from '@/lib/defect-rate'
 import { computeSavingsScenarios, type ScenarioKey } from '@/lib/summary-savings'
@@ -154,13 +153,13 @@ type SummaryProps = {
   seasonData: AnalyticsProps['seasonData']
   seasonRegionData: AnalyticsProps['seasonRegionData']
   seasonStrategyStats: AnalyticsProps['seasonStrategyStats']
-  substitutions: SubstitutionMap[]
+  speciesImprovedRate: Record<string, number>
 }
 
 export function SummaryContent({
   geoRegions, totalPlanted, totalPlantDefect, overallRate,
   totalReserveCost, yearlyData, speciesData, contractorData, seasonData,
-  seasonRegionData, seasonStrategyStats, substitutions,
+  seasonRegionData, seasonStrategyStats, speciesImprovedRate,
 }: SummaryProps) {
   const [activeSeason, setActiveSeason] = useState<SeasonKey>('spring')
   const seasonMeta = SEASON_META[activeSeason]
@@ -249,8 +248,8 @@ export function SummaryContent({
   // (기존엔 고위험 판정=보정율 / 차감=원시율 혼용으로 소표본 극단값이 절감을 부풀렸음)
   const hasRealData = totalPlantDefect > 0
   const savingScenarios = useMemo(
-    () => computeSavingsScenarios(speciesData, substitutions),
-    [speciesData, substitutions]
+    () => computeSavingsScenarios(speciesData, speciesImprovedRate),
+    [speciesData, speciesImprovedRate]
   )
   // 기본 시나리오: 보수(고위험만). 토글로 확장/최대 전환.
   const [scenario, setScenario] = useState<ScenarioKey>('conservative')
@@ -373,7 +372,8 @@ export function SummaryContent({
             {hasRealData && (
               <p className="mt-1 text-center text-[10px] font-normal text-[#9CA3AF] leading-snug">
                 추천 대체 수종을 모두 실제 적용했다고 가정한 추정치입니다.<br />
-                지역·계절·규격·가용성에 따라 실제 효과는 달라질 수 있습니다.
+                요약은 전체 현장 합산 기준이라 지역·계절을 구분하지 않고 수종별 대체 추천을 전체 병합해 산출합니다.<br />
+                실제 효과는 규격·가용성, 단일 현장 시뮬레이터 결과와 달라질 수 있습니다.
               </p>
             )}
           </div>

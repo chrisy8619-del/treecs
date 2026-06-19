@@ -12,13 +12,14 @@ type Props = {
   sites: SiteOption[]
   substitutions: SubstitutionMap[]
   speciesAvgRate: Record<string, number>
+  speciesImprovedRate: Record<string, number>
   altRecs: AltSpeciesRec[]
   analytics: AnalyticsProps
 }
 
 type TabKey = 'summary' | 'dashboard' | 'simulator'
 
-export function DashboardTabsClient({ sites, substitutions, speciesAvgRate, altRecs, analytics }: Props) {
+export function DashboardTabsClient({ sites, substitutions, speciesAvgRate, speciesImprovedRate, altRecs, analytics }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>('summary')
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
@@ -74,7 +75,7 @@ export function DashboardTabsClient({ sites, substitutions, speciesAvgRate, altR
           seasonData={analytics.seasonData}
           seasonRegionData={analytics.seasonRegionData}
           seasonStrategyStats={analytics.seasonStrategyStats}
-          substitutions={substitutions}
+          speciesImprovedRate={speciesImprovedRate}
         />
       )}
       {activeTab === 'dashboard' && (
