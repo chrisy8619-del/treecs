@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { KoreaMap, type RegionData } from './korea-map'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -11,6 +11,7 @@ import type { AnalyticsProps } from './analytics-content'
 import type { SubstitutionMap } from './simulation-client'
 import { getFinalRisk, DEFAULT_MIN_PLANTING } from '../species/species-stats-tab'
 import { adjustedRate } from '@/lib/defect-rate'
+import { computeSavingsScenarios, type ScenarioKey } from '@/lib/summary-savings'
 
 type GeoRegion = { name_en: string; name_ko: string; d: string; cx: number; cy: number }
 
@@ -243,39 +244,25 @@ export function SummaryContent({
         { label: '겨울', rate: 20.49 },
       ]
 
-  // 절감 카드 — 시뮬레이터와 동일 원리의 실데이터 기반 계산:
-  // 대체 수종이 등록된 수종은 최선(최저) 개선 하자율로 대체했다고 가정하고 하자수량 감소분을 합산.
-  // 대체 후보가 없거나 개선 효과가 없는 수종은 현행 하자수량 유지(절감 0).
+  // 절감 카드 — 대체 수종 일괄 적용 '가정' 하의 시나리오별 추정치.
+  // 과대 산정 방지: 대체 전(baseline)·후 하자량을 모두 보정율(adjustedRate) 기준으로 통일한다.
+  // (기존엔 고위험 판정=보정율 / 차감=원시율 혼용으로 소표본 극단값이 절감을 부풀렸음)
   const hasRealData = totalPlantDefect > 0
-  // 원수종명 → 최선 개선 하자율(최저값) 맵
-  const bestImprovedRate = new Map<string, number>()
-  for (const s of substitutions) {
-    const cur = bestImprovedRate.get(s.original_species_name)
-    if (cur == null || s.improved_defect_rate < cur) {
-      bestImprovedRate.set(s.original_species_name, s.improved_defect_rate)
-    }
-  }
-  // 수종별 개선 후 하자수량 합산
-  // 시뮬레이터 '고위험 대체 수종 일괄 적용'과 동일 기준: 보정 하자율 ≥ 20%(고위험) 수종만 대체 적용.
-  // 그 외 수종은 현행 유지(절감 0). 대체 적용 시 하자율이 낮아지는 경우만 반영.
-  const HIGH_RISK_THRESHOLD = 0.20
-  let improvedDefectTotal = 0
-  for (const s of speciesData) {
-    const currentRate = s.inspected > 0 ? s.defect / s.inspected : 0
-    const adjRate = adjustedRate(s.defect, s.inspected)
-    const improved = bestImprovedRate.get(s.name)
-    const applyReplacement = adjRate >= HIGH_RISK_THRESHOLD && improved != null && improved < currentRate
-    const appliedRate = applyReplacement ? improved : currentRate
-    improvedDefectTotal += Math.round(s.inspected * appliedRate)
-  }
-  const realSavedQty = Math.max(0, displayDefect - improvedDefectTotal)
-  const hasSavingData = hasRealData && speciesData.length > 0 && realSavedQty > 0
+  const savingScenarios = useMemo(
+    () => computeSavingsScenarios(speciesData, substitutions),
+    [speciesData, substitutions]
+  )
+  // 기본 시나리오: 보수(고위험만). 토글로 확장/최대 전환.
+  const [scenario, setScenario] = useState<ScenarioKey>('conservative')
+  const sc = savingScenarios[scenario]
+  const hasSavingData = hasRealData && speciesData.length > 0 && sc.savedQty > 0
 
-  // 실데이터 절감분 우선, 데이터/효과 없으면 더미 fallback
-  const displaySavedQty = hasSavingData ? realSavedQty : hasRealData ? 0 : 4823
-  const displayAfterQty = hasRealData ? displayDefect - displaySavedQty : 11564
-  const displaySavingPct = displayDefect > 0
-    ? ((displaySavedQty / displayDefect) * 100).toFixed(1)
+  // 절감 카드 내부 표시는 보정율 baseline 기준. (KPI '예상 하자 수량'·히어로는 원시 displayDefect 유지)
+  const displayBaseline  = hasRealData ? sc.baselineDefect : 16387
+  const displaySavedQty  = hasSavingData ? sc.savedQty : hasRealData ? 0 : 4823
+  const displayAfterQty  = hasRealData ? sc.improvedDefect : 11564
+  const displaySavingPct = displayBaseline > 0
+    ? ((displaySavedQty / displayBaseline) * 100).toFixed(1)
     : '29.4'
 
   // AI 권고 액션 — 실데이터 기반 동적 문자열
@@ -326,12 +313,35 @@ export function SummaryContent({
 
           {/* 절감 효과 */}
           <div className="bg-white rounded-xl p-4">
-            <p className="text-sm font-semibold text-[#111827] mb-3">계절별·지역별 하자관리 적용 시 하자수량 변화</p>
+            <p className="text-sm font-semibold text-[#111827] mb-2">계절별·지역별 하자관리 적용 시 하자수량 변화</p>
+            {/* 시나리오 토글: 보수(고위험만) / 확장(고위험+중위험) / 최대(추천 전체) */}
+            <div className="flex items-center gap-1 mb-1.5">
+              {([
+                { key: 'conservative', label: '고위험만' },
+                { key: 'extended', label: '고위험+중위험' },
+                { key: 'max', label: '추천 전체' },
+              ] as { key: ScenarioKey; label: string }[]).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setScenario(opt.key)}
+                  className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${
+                    scenario === opt.key
+                      ? 'bg-[#14532D] text-white border-[#14532D]'
+                      : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:border-[#14532D]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-[#9CA3AF] mb-3">
+              대상 {sc.targetSpeciesCount}종 · 식재 {sc.targetPlantedQty.toLocaleString()}주
+            </p>
             <div className="space-y-2.5">
               <div>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[#6B7280]">미적용</span>
-                  <span className="text-[#DC2626] font-semibold">{displayDefect.toLocaleString()}주</span>
+                  <span className="text-[#DC2626] font-semibold">{displayBaseline.toLocaleString()}주</span>
                 </div>
                 <div className="h-3 bg-[#FECACA] rounded-full" />
               </div>
@@ -353,11 +363,19 @@ export function SummaryContent({
                 <>
                   ↓ 절감분 {displaySavedQty.toLocaleString()}주 ({displaySavingPct}%)
                   <span className="text-[10px] font-normal text-[#6B7280] ml-1">
-                    {hasRealData ? '(대체 수종 적용 기준)' : '(예시 데이터)'}
+                    {hasRealData
+                      ? `(가정: ${scenario === 'conservative' ? '고위험' : scenario === 'extended' ? '고위험+중위험' : '추천'} 대체 일괄 적용 · 보정율 기준)`
+                      : '(예시 데이터)'}
                   </span>
                 </>
               )}
             </p>
+            {hasRealData && (
+              <p className="mt-1 text-center text-[10px] font-normal text-[#9CA3AF] leading-snug">
+                추천 대체 수종을 모두 실제 적용했다고 가정한 추정치입니다.<br />
+                지역·계절·규격·가용성에 따라 실제 효과는 달라질 수 있습니다.
+              </p>
+            )}
           </div>
         </div>
         <p className="mt-3 pt-3 border-t border-[#C6E09A] text-xs text-[#4B7A1A]">
