@@ -69,7 +69,6 @@ export function DashboardTabsClient({ sites, substitutions, speciesAvgRate, spec
           totalPlantDefect={analytics.totalPlantDefect}
           overallRate={analytics.overallRate}
           totalReserveCost={analytics.totalReserveCost}
-          yearlyData={analytics.yearlyData}
           speciesData={analytics.speciesData}
           contractorData={analytics.contractorData}
           seasonData={analytics.seasonData}

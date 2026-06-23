@@ -3,10 +3,10 @@
 import { useState, useMemo } from 'react'
 import { KoreaMap, type RegionData } from './korea-map'
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { Leaf, TrendingDown, AlertTriangle, Calculator, Sparkles } from 'lucide-react'
+import { Leaf, TrendingDown, AlertTriangle, Calculator } from 'lucide-react'
 import type { AnalyticsProps } from './analytics-content'
 import { getFinalRisk, DEFAULT_MIN_PLANTING } from '../species/species-stats-tab'
 import { adjustedRate } from '@/lib/defect-rate'
@@ -147,7 +147,6 @@ type SummaryProps = {
   totalPlantDefect: number
   overallRate: number | null
   totalReserveCost: number
-  yearlyData: AnalyticsProps['yearlyData']
   speciesData: AnalyticsProps['speciesData']
   contractorData: AnalyticsProps['contractorData']
   seasonData: AnalyticsProps['seasonData']
@@ -158,7 +157,7 @@ type SummaryProps = {
 
 export function SummaryContent({
   geoRegions, totalPlanted, totalPlantDefect, overallRate,
-  totalReserveCost, yearlyData, speciesData, contractorData, seasonData,
+  totalReserveCost, speciesData, contractorData, seasonData,
   seasonRegionData, seasonStrategyStats, speciesImprovedRate,
 }: SummaryProps) {
   const [activeSeason, setActiveSeason] = useState<SeasonKey>('spring')
@@ -189,10 +188,6 @@ export function SummaryContent({
   const displayDefect     = totalPlantDefect > 0 ? totalPlantDefect : 16387
   const displayRate       = overallRate != null ? overallRate * 100 : 14.4
   const displayCost       = totalReserveCost > 0 ? totalReserveCost : 932033700
-
-  const displayYearly = yearlyData.length > 0
-    ? yearlyData.map((d) => ({ year: `${d.year}년`, rate: parseFloat((d.defect_rate * 100).toFixed(1)) }))
-    : [{ year: '2023년', rate: 15.6 }, { year: '2024년', rate: 14.4 }, { year: '2025년', rate: 14.4 }]
 
   // 리스크 현황 — 수종 관리(수목 현황) 탭과 동일한 보정 하자율 + 표본 신뢰도 기준
   // 위험/주의/보통/양호 4단계를 요약 칩 3단계(고/중/저위험)로 매핑:
@@ -264,126 +259,10 @@ export function SummaryContent({
     ? ((displaySavedQty / displayBaseline) * 100).toFixed(1)
     : '29.4'
 
-  // AI 권고 액션 — 실데이터 기반 동적 문자열
-  const topRiskNames = displayRiskTop5.slice(0, 2).map((s) => s.name).join('·')
-  const action1Desc = riskHigh > 0
-    ? `${topRiskNames} → 대체 수종 적용 시 하자율 평균 3~5%p 감소`
-    : '고위험 수종 → 대체 수종 적용 시 하자율 평균 3~5%p 감소'
-  const highRiskContractorCount = displayContractors.filter((c) => c.rate >= 0.20).length
-  const action3Desc = highRiskContractorCount > 0
-    ? `하위 ${highRiskContractorCount}개사 집중 점검 시 고위험 ${riskHigh}종 리스크 관리 가능`
-    : '고위험 협력사 사전 관리 시 리스크 높음 18% → 12%'
-
   return (
     <div className="px-6 py-6 space-y-5 bg-[#F8FAF9] min-h-screen">
 
-      {/* ① 히어로: 절감 효과(상단) + AI 프로세스(하단) — 세로 스택 */}
-      <div className="rounded-2xl bg-[#EFF6E8] border border-[#C6E09A] p-5">
-        <div className="flex flex-col gap-4">
-          {/* 절감 효과 — 최상단 */}
-          <div className="bg-white rounded-xl p-4">
-            <p className="text-sm font-semibold text-[#111827] mb-2">계절별·지역별 하자관리 적용 시 하자수량 변화</p>
-            {/* 시나리오 토글: 보수(고위험만) / 확장(고위험+중위험) / 최대(추천 전체) */}
-            <div className="flex items-center gap-1 mb-1.5">
-              {([
-                { key: 'conservative', label: '고위험만' },
-                { key: 'extended', label: '고위험+중위험' },
-                { key: 'max', label: '추천 전체' },
-              ] as { key: ScenarioKey; label: string }[]).map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => setScenario(opt.key)}
-                  className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${
-                    scenario === opt.key
-                      ? 'bg-[#14532D] text-white border-[#14532D]'
-                      : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:border-[#14532D]'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-[10px] text-[#9CA3AF] mb-3">
-              대상 {sc.targetSpeciesCount}종 · 식재 {sc.targetPlantedQty.toLocaleString()}주
-            </p>
-            <div className="space-y-2.5">
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#6B7280]">미적용</span>
-                  <span className="text-[#DC2626] font-semibold">{displayBaseline.toLocaleString()}주</span>
-                </div>
-                <div className="h-3 bg-[#FECACA] rounded-full" />
-              </div>
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#6B7280]">적용</span>
-                  <span className="text-[#16A34A] font-semibold">{displayAfterQty.toLocaleString()}주</span>
-                </div>
-                <div className="h-3 bg-[#F3F4F6] rounded-full relative">
-                  <div className="h-3 bg-[#16A34A] rounded-full absolute left-0 top-0" style={{ width: `${(100 - Number(displaySavingPct)).toFixed(1)}%` }} />
-                  <div className="h-3 border border-dashed border-[#16A34A] rounded-full absolute top-0" style={{ left: `${(100 - Number(displaySavingPct)).toFixed(1)}%`, width: `${displaySavingPct}%` }} />
-                </div>
-              </div>
-            </div>
-            <p className="mt-3 text-center text-sm font-semibold text-[#14532D]">
-              {hasRealData && !hasSavingData ? (
-                <span className="text-xs font-normal text-[#6B7280]">등록된 대체 수종이 없어 절감 효과를 산출할 수 없습니다</span>
-              ) : (
-                <>
-                  ↓ 절감분 {displaySavedQty.toLocaleString()}주 ({displaySavingPct}%)
-                  <span className="text-[10px] font-normal text-[#6B7280] ml-1">
-                    {hasRealData
-                      ? `(가정: ${scenario === 'conservative' ? '고위험' : scenario === 'extended' ? '고위험+중위험' : '추천'} 대체 일괄 적용 · 보정율 기준)`
-                      : '(예시 데이터)'}
-                  </span>
-                </>
-              )}
-            </p>
-            {hasRealData && (
-              <p className="mt-1 text-center text-[10px] font-normal text-[#9CA3AF] leading-snug">
-                추천 대체 수종을 모두 실제 적용했다고 가정한 추정치입니다.<br />
-                요약은 전체 현장 합산 기준이라 지역·계절을 구분하지 않고 수종별 대체 추천을 전체 병합해 산출합니다.<br />
-                실제 효과는 규격·가용성, 단일 현장 시뮬레이터 결과와 달라질 수 있습니다.
-              </p>
-            )}
-          </div>
-
-          {/* AI 프로세스 — 최하단 */}
-          <div className="bg-white rounded-xl p-4">
-            <p className="text-sm font-semibold text-[#111827] mb-4">AI 기반 조경 하자 저감 프로세스</p>
-            <div className="flex items-center justify-between">
-              {([
-                { icon: '📋', label: '식재계획', active: false },
-                { icon: '🧠', label: 'AI위험\n예측', active: true },
-                { icon: '🌿', label: '최적수종\n추천', active: false },
-                { icon: '🌱', label: '식재실행', active: false },
-                { icon: '🛡️', label: '하자저감\n효과', active: false },
-              ] as const).map((step, i) => (
-                <div key={i} className="flex items-center gap-1">
-                  <div className="flex flex-col items-center text-center">
-                    {step.active ? (
-                      <div className="w-10 h-10 rounded-lg bg-[#14532D] flex items-center justify-center text-xl mb-1">
-                        {step.icon}
-                      </div>
-                    ) : (
-                      <div className="text-2xl mb-1">{step.icon}</div>
-                    )}
-                    <span className={`text-[10px] whitespace-pre-line leading-tight ${step.active ? 'text-[#14532D] font-semibold' : 'text-[#6B7280]'}`}>
-                      {step.label}
-                    </span>
-                  </div>
-                  {i < 4 && <span className="text-[#D1D5DB] text-sm mx-0.5 mb-3">›</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <p className="mt-3 pt-3 border-t border-[#C6E09A] text-xs text-[#4B7A1A]">
-          분석 모수 {displayPlanted.toLocaleString()}주 기준 · 2025.05
-        </p>
-      </div>
-
-      {/* ② KPI 4개 */}
+      {/* ① KPI 4개 */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3.5 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-[#DCFCE7] flex items-center justify-center shrink-0">
@@ -443,30 +322,11 @@ export function SummaryContent({
         </span>
       </div>
 
-      {/* ③ Row A: 좌(연도별+계절별+리스크) | 우(식재 전략) — KPI 카드 비율 그대로 50:50 */}
+      {/* ③ Row A: 좌(계절별+리스크) | 우(식재 전략) — KPI 카드 비율 그대로 50:50 */}
       <div className="grid gap-4 md:grid-cols-2 items-stretch">
 
-        {/* 좌측: 연도별 → 계절별 → 리스크 현황 (3차트 수직 스택) */}
+        {/* 좌측: 계절별 → 리스크 현황 (2차트 수직 스택) */}
         <div className="grid gap-4 content-start">
-
-          {/* 연도별 하자율 추이 */}
-          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-            <h2 className="text-sm font-semibold text-[#111827] mb-3">연도별 하자율 추이</h2>
-            <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={displayYearly} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="summaryAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#14532D" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#14532D" stopOpacity={0.01} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 25]} />
-                <Tooltip formatter={(v) => [`${v}%`, '하자율']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Area type="monotone" dataKey="rate" stroke="#14532D" strokeWidth={2} fill="url(#summaryAreaGrad)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
 
           {/* 계절별 하자율 */}
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
@@ -595,7 +455,7 @@ export function SummaryContent({
         </div>
       </div>
 
-      {/* ④ Row B: 좌(협력사별 TOP10) | 우(AI 권고 액션) */}
+      {/* ④ Row B: 좌(협력사별 TOP10) | 우(여백) */}
       <div className="grid gap-4 md:grid-cols-2">
 
         {/* 협력사별 하자율 TOP 10 */}
@@ -617,39 +477,79 @@ export function SummaryContent({
             ))}
           </div>
         </div>
+      </div>
 
-        {/* AI 권고 액션 */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-          <h2 className="text-sm font-semibold text-[#111827] mb-3 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-[#14532D]" /> AI 권고 액션
-          </h2>
-          <div className="space-y-2.5">
-            {[
-              {
-                title: '고위험 수종 교체',
-                desc: action1Desc,
-                highlight: '',
-              },
-              {
-                title: '강원권 봄 식재 축소',
-                desc: '위험도 높음(16.7%) 권역 시기 조정 시',
-                highlight: '약 ₩4,100만원 절감',
-              },
-              {
-                title: '고위험 협력사 사전 관리',
-                desc: action3Desc,
-                highlight: '',
-              },
-            ].map((action, i) => (
-              <div key={i} className="rounded-lg border border-[#E5E7EB] px-4 py-3">
-                <p className="text-xs font-semibold text-[#111827]">{action.title}</p>
-                <p className="text-xs text-[#6B7280] mt-0.5">
-                  {action.desc}{action.highlight && <span className="text-[#16A34A] font-semibold"> {action.highlight}</span>}
-                </p>
-              </div>
+      {/* ⑤ 절감 효과 — 대시보드 최하단 (전체폭) */}
+      <div className="rounded-2xl bg-[#EFF6E8] border border-[#C6E09A] p-5">
+        <div className="bg-white rounded-xl p-4">
+          <p className="text-sm font-semibold text-[#111827] mb-2">계절별·지역별 하자관리 적용 시 하자수량 변화</p>
+          {/* 시나리오 토글: 보수(고위험만) / 확장(고위험+중위험) / 최대(추천 전체) */}
+          <div className="flex items-center gap-1 mb-1.5">
+            {([
+              { key: 'conservative', label: '고위험만' },
+              { key: 'extended', label: '고위험+중위험' },
+              { key: 'max', label: '추천 전체' },
+            ] as { key: ScenarioKey; label: string }[]).map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setScenario(opt.key)}
+                className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${
+                  scenario === opt.key
+                    ? 'bg-[#14532D] text-white border-[#14532D]'
+                    : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:border-[#14532D]'
+                }`}
+              >
+                {opt.label}
+              </button>
             ))}
           </div>
+          <p className="text-[10px] text-[#9CA3AF] mb-3">
+            대상 {sc.targetSpeciesCount}종 · 식재 {sc.targetPlantedQty.toLocaleString()}주
+          </p>
+          <div className="space-y-2.5">
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#6B7280]">미적용</span>
+                <span className="text-[#DC2626] font-semibold">{displayBaseline.toLocaleString()}주</span>
+              </div>
+              <div className="h-3 bg-[#FECACA] rounded-full" />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#6B7280]">적용</span>
+                <span className="text-[#16A34A] font-semibold">{displayAfterQty.toLocaleString()}주</span>
+              </div>
+              <div className="h-3 bg-[#F3F4F6] rounded-full relative">
+                <div className="h-3 bg-[#16A34A] rounded-full absolute left-0 top-0" style={{ width: `${(100 - Number(displaySavingPct)).toFixed(1)}%` }} />
+                <div className="h-3 border border-dashed border-[#16A34A] rounded-full absolute top-0" style={{ left: `${(100 - Number(displaySavingPct)).toFixed(1)}%`, width: `${displaySavingPct}%` }} />
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-center text-sm font-semibold text-[#14532D]">
+            {hasRealData && !hasSavingData ? (
+              <span className="text-xs font-normal text-[#6B7280]">등록된 대체 수종이 없어 절감 효과를 산출할 수 없습니다</span>
+            ) : (
+              <>
+                ↓ 절감분 {displaySavedQty.toLocaleString()}주 ({displaySavingPct}%)
+                <span className="text-[10px] font-normal text-[#6B7280] ml-1">
+                  {hasRealData
+                    ? `(가정: ${scenario === 'conservative' ? '고위험' : scenario === 'extended' ? '고위험+중위험' : '추천'} 대체 일괄 적용 · 보정율 기준)`
+                    : '(예시 데이터)'}
+                </span>
+              </>
+            )}
+          </p>
+          {hasRealData && (
+            <p className="mt-1 text-center text-[10px] font-normal text-[#9CA3AF] leading-snug">
+              추천 대체 수종을 모두 실제 적용했다고 가정한 추정치입니다.<br />
+              요약은 전체 현장 합산 기준이라 지역·계절을 구분하지 않고 수종별 대체 추천을 전체 병합해 산출합니다.<br />
+              실제 효과는 규격·가용성, 단일 현장 시뮬레이터 결과와 달라질 수 있습니다.
+            </p>
+          )}
         </div>
+        <p className="mt-3 pt-3 border-t border-[#C6E09A] text-xs text-[#4B7A1A]">
+          분석 모수 {displayPlanted.toLocaleString()}주 기준 · 2025.05
+        </p>
       </div>
 
     </div>
