@@ -322,10 +322,10 @@ export function SummaryContent({
         </span>
       </div>
 
-      {/* ③ Row A: 좌(계절별+리스크) | 우(식재 전략) — KPI 카드 비율 그대로 50:50 */}
+      {/* ③ Row A: 좌(계절별+리스크+협력사) | 우(식재 전략) — KPI 카드 비율 그대로 50:50 */}
       <div className="grid gap-4 md:grid-cols-2 items-stretch">
 
-        {/* 좌측: 계절별 → 리스크 현황 (2차트 수직 스택) */}
+        {/* 좌측: 계절별 → 리스크 현황 → 협력사 TOP10 (3차트 수직 스택) */}
         <div className="grid gap-4 content-start">
 
           {/* 계절별 하자율 */}
@@ -371,9 +371,29 @@ export function SummaryContent({
               <span className="px-2.5 py-1 rounded-full bg-[#DCFCE7] text-[#16A34A] font-semibold">낮음 35%</span>
             </div>
           </div>
+
+          {/* 협력사별 하자율 TOP 10 */}
+          <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
+            <h2 className="text-sm font-semibold text-[#111827] mb-3">협력사별 하자율 TOP 10</h2>
+            <div className="space-y-1.5">
+              {displayContractors.map((c, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="w-4 text-right text-[#9CA3AF] shrink-0">{i + 1}</span>
+                  <span className="w-24 text-[#6B7280] truncate shrink-0">{c.name}</span>
+                  <div className="flex-1 h-2 bg-[#F3F4F6] rounded-full">
+                    <div
+                      className="h-2 rounded-full"
+                      style={{ width: `${(c.rate / 0.272) * 100}%`, backgroundColor: contractorBarColor(c.rate) }}
+                    />
+                  </div>
+                  <span className="w-10 text-right font-semibold text-[#374151] shrink-0">{(c.rate * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* 우측: 계절별·지역별·수종별 식재 전략 — 예상 하자 수량+예상 처리 비용 2칸 너비와 동일 높이 */}
+        {/* 우측: 계절별·지역별·수종별 식재 전략 — 좌측 3차트 스택 전체 높이에 맞춤 */}
         <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 flex flex-col">
           <h2 className="text-sm font-semibold text-[#111827] mb-3">계절별·지역별·수종별 식재 전략</h2>
 
@@ -455,31 +475,7 @@ export function SummaryContent({
         </div>
       </div>
 
-      {/* ④ Row B: 좌(협력사별 TOP10) | 우(여백) */}
-      <div className="grid gap-4 md:grid-cols-2">
-
-        {/* 협력사별 하자율 TOP 10 */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5">
-          <h2 className="text-sm font-semibold text-[#111827] mb-3">협력사별 하자율 TOP 10</h2>
-          <div className="space-y-1.5">
-            {displayContractors.map((c, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                <span className="w-4 text-right text-[#9CA3AF] shrink-0">{i + 1}</span>
-                <span className="w-24 text-[#6B7280] truncate shrink-0">{c.name}</span>
-                <div className="flex-1 h-2 bg-[#F3F4F6] rounded-full">
-                  <div
-                    className="h-2 rounded-full"
-                    style={{ width: `${(c.rate / 0.272) * 100}%`, backgroundColor: contractorBarColor(c.rate) }}
-                  />
-                </div>
-                <span className="w-10 text-right font-semibold text-[#374151] shrink-0">{(c.rate * 100).toFixed(1)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ⑤ 절감 효과 — 대시보드 최하단 (전체폭) */}
+      {/* ④ 절감 효과 — 대시보드 최하단 (전체폭) */}
       <div className="rounded-2xl bg-[#EFF6E8] border border-[#C6E09A] p-5">
         <div className="bg-white rounded-xl p-4">
           <p className="text-sm font-semibold text-[#111827] mb-2">계절별·지역별 하자관리 적용 시 하자수량 변화</p>
