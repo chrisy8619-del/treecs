@@ -277,40 +277,10 @@ export function SummaryContent({
   return (
     <div className="px-6 py-6 space-y-5 bg-[#F8FAF9] min-h-screen">
 
-      {/* ① 히어로: AI 프로세스 + 절감 효과 */}
+      {/* ① 히어로: 절감 효과(상단) + AI 프로세스(하단) — 세로 스택 */}
       <div className="rounded-2xl bg-[#EFF6E8] border border-[#C6E09A] p-5">
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* AI 프로세스 */}
-          <div className="bg-white rounded-xl p-4">
-            <p className="text-sm font-semibold text-[#111827] mb-4">AI 기반 조경 하자 저감 프로세스</p>
-            <div className="flex items-center justify-between">
-              {([
-                { icon: '📋', label: '식재계획', active: false },
-                { icon: '🧠', label: 'AI위험\n예측', active: true },
-                { icon: '🌿', label: '최적수종\n추천', active: false },
-                { icon: '🌱', label: '식재실행', active: false },
-                { icon: '🛡️', label: '하자저감\n효과', active: false },
-              ] as const).map((step, i) => (
-                <div key={i} className="flex items-center gap-1">
-                  <div className="flex flex-col items-center text-center">
-                    {step.active ? (
-                      <div className="w-10 h-10 rounded-lg bg-[#14532D] flex items-center justify-center text-xl mb-1">
-                        {step.icon}
-                      </div>
-                    ) : (
-                      <div className="text-2xl mb-1">{step.icon}</div>
-                    )}
-                    <span className={`text-[10px] whitespace-pre-line leading-tight ${step.active ? 'text-[#14532D] font-semibold' : 'text-[#6B7280]'}`}>
-                      {step.label}
-                    </span>
-                  </div>
-                  {i < 4 && <span className="text-[#D1D5DB] text-sm mx-0.5 mb-3">›</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 절감 효과 */}
+        <div className="flex flex-col gap-4">
+          {/* 절감 효과 — 최상단 */}
           <div className="bg-white rounded-xl p-4">
             <p className="text-sm font-semibold text-[#111827] mb-2">계절별·지역별 하자관리 적용 시 하자수량 변화</p>
             {/* 시나리오 토글: 보수(고위험만) / 확장(고위험+중위험) / 최대(추천 전체) */}
@@ -376,6 +346,36 @@ export function SummaryContent({
                 실제 효과는 규격·가용성, 단일 현장 시뮬레이터 결과와 달라질 수 있습니다.
               </p>
             )}
+          </div>
+
+          {/* AI 프로세스 — 최하단 */}
+          <div className="bg-white rounded-xl p-4">
+            <p className="text-sm font-semibold text-[#111827] mb-4">AI 기반 조경 하자 저감 프로세스</p>
+            <div className="flex items-center justify-between">
+              {([
+                { icon: '📋', label: '식재계획', active: false },
+                { icon: '🧠', label: 'AI위험\n예측', active: true },
+                { icon: '🌿', label: '최적수종\n추천', active: false },
+                { icon: '🌱', label: '식재실행', active: false },
+                { icon: '🛡️', label: '하자저감\n효과', active: false },
+              ] as const).map((step, i) => (
+                <div key={i} className="flex items-center gap-1">
+                  <div className="flex flex-col items-center text-center">
+                    {step.active ? (
+                      <div className="w-10 h-10 rounded-lg bg-[#14532D] flex items-center justify-center text-xl mb-1">
+                        {step.icon}
+                      </div>
+                    ) : (
+                      <div className="text-2xl mb-1">{step.icon}</div>
+                    )}
+                    <span className={`text-[10px] whitespace-pre-line leading-tight ${step.active ? 'text-[#14532D] font-semibold' : 'text-[#6B7280]'}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < 4 && <span className="text-[#D1D5DB] text-sm mx-0.5 mb-3">›</span>}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         <p className="mt-3 pt-3 border-t border-[#C6E09A] text-xs text-[#4B7A1A]">
