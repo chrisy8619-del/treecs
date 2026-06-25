@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
-export type SpeciesFormState = {
+type SpeciesFormState = {
   error: string
   success: boolean
 }

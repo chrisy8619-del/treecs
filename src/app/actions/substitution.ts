@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import * as XLSX from 'xlsx'
 
-export type SubstitutionUploadResult = {
+// 'use server' 파일은 async 함수만 export 가능하므로 타입은 내부 전용으로 둔다.
+type SubstitutionUploadResult = {
   success: boolean
   successCount: number
   failCount: number

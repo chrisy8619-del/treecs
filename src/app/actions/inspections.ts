@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
-export type CreateInspectionRoundState = {
+type CreateInspectionRoundState = {
   error: string
   success: boolean
 }

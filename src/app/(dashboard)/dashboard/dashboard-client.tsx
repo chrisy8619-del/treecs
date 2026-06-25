@@ -14,7 +14,7 @@ import {
   RefreshCw, Upload, TrendingUp, Coins, TreePine, Leaf,
   Target, Search, FileDown, ChevronLeft, ChevronRight,
 } from 'lucide-react'
-import { type DefectAnalysisRow } from '@/app/actions/upload'
+import { type DefectAnalysisRow } from '@/app/actions/upload-types'
 import { BATCH_SIZE } from '@/lib/upload-config'
 
 // ─── 타입 ────────────────────────────────────────────────

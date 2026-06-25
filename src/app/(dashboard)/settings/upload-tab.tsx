@@ -5,8 +5,8 @@ import * as XLSX from 'xlsx'
 import {
   uploadPlantingRecords,
   uploadInspectionResults,
-  type UploadResult,
 } from '@/app/actions/upload'
+import type { UploadResult } from '@/app/actions/upload-types'
 import { uploadSubstitutions } from '@/app/actions/substitution'
 import { BATCH_SIZE } from '@/lib/upload-config'
 import { Button } from '@/components/ui/button'
