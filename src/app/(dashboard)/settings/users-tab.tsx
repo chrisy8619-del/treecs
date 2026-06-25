@@ -33,15 +33,17 @@ const statusLabel: Record<string, string> = {
   active: '활성',
   pending: '승인 대기',
   inactive: '비활성',
+  deleted: '삭제됨',
 }
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   active: 'default',
   pending: 'secondary',
   inactive: 'outline',
+  deleted: 'destructive',
 }
 
-async function callUserManagement(body: { action: string; userId: string; role?: string }): Promise<{ error?: string }> {
+async function callUserManagement(body: { action: string; userId: string; role?: string }): Promise<{ error?: string; tempPassword?: string }> {
   const res = await fetch('/api/user-management', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -49,7 +51,7 @@ async function callUserManagement(body: { action: string; userId: string; role?:
   })
   const data = await res.json()
   if (!res.ok) return { error: data.error ?? '요청 실패' }
-  return {}
+  return { tempPassword: data.tempPassword }
 }
 
 export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]; myRole: string }) {
@@ -210,6 +212,69 @@ export function UsersTab({ users: initialUsers, myRole }: { users: UserProfile[]
                         >
                           재활성화
                         </Button>
+                      )}
+                      {myRole === 'superadmin' && u.status !== 'deleted' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isPending}
+                            onClick={async () => {
+                              if (!window.confirm(`${u.email} 계정으로 비밀번호 재설정 링크를 발송하시겠습니까?`)) return
+                              setIsPending(true)
+                              try {
+                                const res = await callUserManagement({ action: 'resetPassword', userId: u.id })
+                                if (res.error) toast.error(res.error)
+                                else toast.success('재설정 링크를 발송했습니다.')
+                              } finally { setIsPending(false) }
+                            }}
+                          >
+                            비밀번호 재설정
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isPending}
+                            onClick={async () => {
+                              if (!window.confirm(`${u.email} 계정에 임시 비밀번호를 발급하시겠습니까?\n발급 후 화면에 표시되는 임시 비밀번호를 사용자에게 전달하세요.`)) return
+                              setIsPending(true)
+                              try {
+                                const res = await callUserManagement({ action: 'setTempPassword', userId: u.id })
+                                if (res.error) toast.error(res.error)
+                                else if (res.tempPassword) {
+                                  toast.success('임시 비밀번호가 발급되었습니다.')
+                                  // 관리자가 복사·전달할 수 있도록 표시 (prompt는 텍스트 선택·복사 가능)
+                                  window.prompt(
+                                    `${u.email} 임시 비밀번호 (복사해 전달하세요. 로그인 후 변경 안내 권장):`,
+                                    res.tempPassword
+                                  )
+                                }
+                              } finally { setIsPending(false) }
+                            }}
+                          >
+                            임시비번 발급
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={isPending}
+                            onClick={async () => {
+                              if (!window.confirm('정말 삭제하시겠습니까? 해당 계정은 로그인할 수 없게 됩니다.')) return
+                              setIsPending(true)
+                              try {
+                                const res = await callUserManagement({ action: 'delete', userId: u.id })
+                                if (res.error) toast.error(res.error)
+                                else {
+                                  // 숨김 정책: 삭제 즉시 목록에서 제거
+                                  setUsers((prev) => prev.filter((x) => x.id !== u.id))
+                                  toast.success('계정이 삭제되었습니다.')
+                                }
+                              } finally { setIsPending(false) }
+                            }}
+                          >
+                            삭제
+                          </Button>
+                        </>
                       )}
                     </div>
                   </TableCell>

@@ -33,6 +33,7 @@ export default async function SettingsPage() {
       supabase
         .from('profiles')
         .select('id, name, email, department, role, status, created_at')
+        .neq('status', 'deleted') // 소프트 삭제된 계정은 목록에서 숨김
         .order('created_at', { ascending: false }),
       supabase
         .from('upload_logs')

@@ -35,6 +35,10 @@ export async function login(state: { error: string }, formData: FormData) {
       await supabase.auth.signOut()
       return { error: '비활성화된 계정입니다. 관리자에게 문의하세요.' }
     }
+    if (profile?.status === 'deleted') {
+      await supabase.auth.signOut()
+      return { error: '삭제된 계정입니다. 관리자에게 문의하세요.' }
+    }
   }
 
   redirect('/simulation')
