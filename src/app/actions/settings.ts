@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 
-export type SettingsFormState = {
+// 'use server' 파일은 async 함수만 export할 수 있으므로 타입은 export하지 않고 내부에서만 사용한다.
+type SettingsFormState = {
   error: string
   success: boolean
   message?: string
