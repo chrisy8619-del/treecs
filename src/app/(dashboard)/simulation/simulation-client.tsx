@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, useOptimistic, useTransition } from 'react'
 import Image from 'next/image'
 import * as XLSX from 'xlsx'
 import {
@@ -8,8 +8,18 @@ import {
   TrendingDown, TreePine, Leaf, AlertTriangle, Target, HelpCircle,
 } from 'lucide-react'
 import { uploadSubstitutions } from '@/app/actions/substitution'
+import {
+  upsertCartItem,
+  removeCartItem,
+  clearCart,
+  confirmCart,
+  bulkUpsertCartItems,
+} from '@/app/actions/cart'
+import type { CartItem, CartItemInput } from '@/app/actions/cart-types'
 import { resolveSeasonCode, SEASON_CODE_TO_KO, SEASON_ORDER, KOREAN_SEASONS } from '@/lib/season-utils'
 import { getRecommendedSubstitutes, mapRegion } from '@/lib/species-knowledge'
+import { ruleBasedRecommender, getSpeciesRiskFromRate } from '@/lib/substitute-recommender'
+import { CartPanel } from './cart-panel'
 
 export type SiteOption = {
   id: string
@@ -112,15 +122,37 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
   const [nameDropdownOpen, setNameDropdownOpen] = useState(false)
   const [siteRows, setSiteRows] = useState<PlantingRow[]>([])
   const [loadingRows, setLoadingRows] = useState(false)
-  const [selectedSubstitutes, setSelectedSubstitutes] = useState<Record<string, string>>({})
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+
+  // ── 장바구니(서버 권위) 상태 ──
+  // cartItems 가 서버 진실. 화면 표시는 낙관적 버전(optimisticItems) 사용.
+  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [cartStatus, setCartStatus] = useState<'draft' | 'confirmed'>('draft')
+  const [isCartPending, startCartTransition] = useTransition()
+  const [optimisticItems, applyOptimistic] = useOptimistic(
+    cartItems,
+    (state: CartItem[], action: { type: 'upsert'; item: CartItem } | { type: 'remove'; name: string } | { type: 'clear' }) => {
+      if (action.type === 'clear') return []
+      if (action.type === 'remove') return state.filter((i) => i.originalSpeciesName !== action.name)
+      const rest = state.filter((i) => i.originalSpeciesName !== action.item.originalSpeciesName)
+      return [...rest, action.item]
+    }
+  )
+
+  // 기존 소비 코드(tableRows 등)가 참조하는 selectedSubstitutes 맵을 cartItems에서 파생.
+  // → tableRows/improvedWeightedRate/improvedTotalCost 계산 로직은 시그니처 무손실로 그대로 동작.
+  const selectedSubstitutes = useMemo(
+    () => Object.fromEntries(optimisticItems.map((i) => [i.originalSpeciesName, i.substituteSpeciesName])),
+    [optimisticItems]
+  )
 
   useEffect(() => {
     if (!selectedSiteId) return
     setLoadingRows(true)
     setSiteRows([])
-    setSelectedSubstitutes({})
+    setCartItems([])
+    setCartStatus('draft')
     fetch(`/api/plantings-by-site?site_id=${selectedSiteId}`)
       .then((r) => r.json())
       .then((data: PlantingRow[]) => {
@@ -139,6 +171,26 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
       })
       .catch(() => setSiteRows([]))
       .finally(() => setLoadingRows(false))
+  }, [selectedSiteId])
+
+  // 현장 변경 시 해당 현장의 draft 장바구니 로드 (DB 영속·공유)
+  useEffect(() => {
+    if (!selectedSiteId) return
+    fetch(`/api/cart-by-site?site_id=${selectedSiteId}`)
+      .then((r) => r.json())
+      .then((data: { cart: { status: 'draft' | 'confirmed'; items: CartItem[] } | null }) => {
+        if (data.cart) {
+          setCartItems(data.cart.items)
+          setCartStatus(data.cart.status)
+        } else {
+          setCartItems([])
+          setCartStatus('draft')
+        }
+      })
+      .catch(() => {
+        setCartItems([])
+        setCartStatus('draft')
+      })
   }, [selectedSiteId])
 
   const codeMatches = useMemo(
@@ -212,65 +264,107 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
   }, [altRecs, sites, selectedSiteId, siteRows])
 
   // 수목하자율 기준 리스크 등급 헬퍼 (speciesAvgRate 값 → '고위험'|'중위험'|'저위험'|null)
-  const getSpeciesRisk = useCallback((name: string | null): string | null => {
-    if (!name) return null
-    const rate = speciesAvgRate[name]
-    if (rate == null) return null
-    if (rate >= 0.20) return '고위험'
-    if (rate >= 0.10) return '중위험'
-    return '저위험'
-  }, [speciesAvgRate])
+  const getSpeciesRisk = useCallback(
+    (name: string | null): string | null => getSpeciesRiskFromRate(speciesAvgRate, name),
+    [speciesAvgRate]
+  )
 
-  // 현장 내 저위험 수종을 고위험/중위험 수종의 대체 후보로 자동 추천 (수목하자율 기준)
-  const subMap = useMemo(() => {
-    const map = new Map<string, { name: string; rate: number; isAuto?: boolean }[]>()
+  // 현장 내 저위험 수종을 고위험/중위험 수종의 대체 후보로 자동 추천 (수목하자율 기준).
+  // 후보풀·랭킹 산출은 substitute-recommender 경계로 분리(향후 회귀 모델 교체 지점).
+  const subMap = useMemo(
+    () => ruleBasedRecommender({ dbSubMap, altRecMap, siteRows, speciesAvgRate }),
+    [dbSubMap, altRecMap, siteRows, speciesAvgRate]
+  )
 
-    // 1순위: DB 등록 데이터 (하자율 낮은 순 상위 3개)
-    for (const [k, v] of dbSubMap) {
-      const sorted = [...v].sort((a, b) => a.rate - b.rate).slice(0, 3)
-      map.set(k, sorted.map((s) => ({ ...s, isAuto: false })))
-    }
-
-    // 2순위: 지역·계절 기반 엑셀 데이터 (DB 등록 없는 수종에 적용)
-    for (const [speciesName, altCandidates] of altRecMap) {
-      if (map.has(speciesName) && map.get(speciesName)!.length > 0) continue
-      const candidates = altCandidates
-        .filter((name) => name !== speciesName)
-        .map((name) => ({
-          name,
-          rate: speciesAvgRate[name] ?? 0,
-          isAuto: true,
-        }))
-        .sort((a, b) => a.rate - b.rate)
-        .slice(0, 3)
-      if (candidates.length > 0) map.set(speciesName, candidates)
-    }
-
-    // 3순위: 현장 내 저위험 수종 자동 추천 (위에서도 없는 경우)
-    const lowRiskSpecies = Array.from(
-      new Map(
-        siteRows
-          .filter((r) => r.species_name && getSpeciesRisk(r.species_name) === '저위험')
-          .map((r) => {
-            const rate = speciesAvgRate[r.species_name!] ?? 0
-            return [r.species_name!, { name: r.species_name!, rate }]
-          })
-      ).values()
-    ).sort((a, b) => a.rate - b.rate)
-
-    for (const r of siteRows) {
-      if (!r.species_name) continue
-      const risk = getSpeciesRisk(r.species_name)
-      if (risk !== '고위험' && risk !== '중위험') continue
-      if (map.has(r.species_name) && map.get(r.species_name)!.length > 0) continue
-      const candidates = lowRiskSpecies.filter((s) => s.name !== r.species_name).slice(0, 3)
-      if (candidates.length > 0) {
-        map.set(r.species_name, candidates.map((s) => ({ ...s, isAuto: true })))
+  // ── 장바구니 액션 핸들러 ──
+  // 특정 원수종 + 대체수종명으로 CartItemInput 구성 (현장 식재 행에서 스냅샷 추출)
+  const buildCartInput = useCallback(
+    (originalName: string, substituteName: string): CartItemInput | null => {
+      const row = siteRows.find((r) => r.species_name === originalName)
+      const candidates = subMap.get(originalName) ?? []
+      const candidate = candidates.find((c) => c.name === substituteName)
+      const rankIdx = candidates.findIndex((c) => c.name === substituteName)
+      const originalRate =
+        speciesAvgRate[originalName] != null ? speciesAvgRate[originalName] : row?.expected_defect_rate ?? null
+      return {
+        originalSpeciesName: originalName,
+        substituteSpeciesName: substituteName,
+        quantity: row?.quantity_planted ?? null,
+        unitPrice: row?.unit_price ?? null,
+        originalRate,
+        improvedRate: candidate?.rate ?? speciesAvgRate[substituteName] ?? null,
+        candidateRank: rankIdx >= 0 ? rankIdx + 1 : null,
+        source: candidate?.isAuto === false ? 'db' : 'auto',
       }
-    }
+    },
+    [siteRows, subMap, speciesAvgRate]
+  )
 
-    return map
-  }, [dbSubMap, altRecMap, siteRows, getSpeciesRisk, speciesAvgRate])
+  // 담기/교체 — 낙관적 반영 후 서버 권위로 확정
+  const handleAddToCart = useCallback(
+    (originalName: string, substituteName: string) => {
+      if (!selectedSiteId || !substituteName) return
+      const input = buildCartInput(originalName, substituteName)
+      if (!input) return
+      const optimistic: CartItem = {
+        ...input,
+        id: `optimistic-${originalName}`,
+        reductionRate: input.originalRate != null && input.improvedRate != null ? input.originalRate - input.improvedRate : null,
+        improvedDefectQty: input.quantity != null && input.improvedRate != null ? Math.round(input.quantity * input.improvedRate) : null,
+        improvedReserveCost: null,
+      }
+      startCartTransition(async () => {
+        applyOptimistic({ type: 'upsert', item: optimistic })
+        const res = await upsertCartItem(selectedSiteId, input)
+        if (res.success) {
+          setCartItems(res.cart.items)
+          setCartStatus(res.cart.status)
+        }
+      })
+    },
+    [selectedSiteId, buildCartInput, applyOptimistic]
+  )
+
+  // 항목 제거
+  const handleRemoveFromCart = useCallback(
+    (originalName: string) => {
+      if (!selectedSiteId) return
+      startCartTransition(async () => {
+        applyOptimistic({ type: 'remove', name: originalName })
+        const res = await removeCartItem(selectedSiteId, originalName)
+        if (res.success) {
+          setCartItems(res.cart.items)
+          setCartStatus(res.cart.status)
+        }
+      })
+    },
+    [selectedSiteId, applyOptimistic]
+  )
+
+  // 카트 비우기
+  const handleClearCart = useCallback(() => {
+    if (!selectedSiteId) return
+    startCartTransition(async () => {
+      applyOptimistic({ type: 'clear' })
+      const res = await clearCart(selectedSiteId)
+      if (res.success) {
+        setCartItems(res.cart.items)
+        setCartStatus(res.cart.status)
+      }
+    })
+  }, [selectedSiteId, applyOptimistic])
+
+  // 카트 확정 (draft → confirmed)
+  const handleConfirmCart = useCallback(() => {
+    if (!selectedSiteId) return
+    startCartTransition(async () => {
+      const res = await confirmCart(selectedSiteId)
+      if (res.success) {
+        setCartItems(res.cart.items)
+        setCartStatus(res.cart.status)
+      }
+    })
+  }, [selectedSiteId])
 
   const tableRows = useMemo(() => {
     return siteRows.map((r) => {
@@ -679,9 +773,10 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
     XLSX.writeFile(wb, '대체수종매핑_양식.xlsx')
   }
 
-  // 고위험 대체 수종 일괄 적용
+  // 고위험 대체 수종 일괄 적용 (장바구니 일괄 담기)
   function handleBulkApply() {
-    const bulk: Record<string, string> = {}
+    if (!selectedSiteId) return
+    const inputs: CartItemInput[] = []
     for (const row of tableRows) {
       const speciesAvgRateVal = row.speciesName && speciesAvgRate[row.speciesName] != null
         ? speciesAvgRate[row.speciesName] : null
@@ -689,12 +784,18 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
       if (!isHighRisk) continue
       if (row.substituteOptions.length === 0) continue
       if (!selectedSubstitutes[row.speciesName]) {
-        bulk[row.speciesName] = row.substituteOptions[0].name
+        const input = buildCartInput(row.speciesName, row.substituteOptions[0].name)
+        if (input) inputs.push(input)
       }
     }
-    if (Object.keys(bulk).length > 0) {
-      setSelectedSubstitutes((prev) => ({ ...prev, ...bulk }))
-    }
+    if (inputs.length === 0) return
+    startCartTransition(async () => {
+      const res = await bulkUpsertCartItems(selectedSiteId, inputs)
+      if (res.success) {
+        setCartItems(res.cart.items)
+        setCartStatus(res.cart.status)
+      }
+    })
   }
 
   const actionButtons = (
@@ -1139,20 +1240,32 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
                       <td className="px-3 py-2">
                         {isHighRisk ? (
                           hasSubOptions ? (
-                            <div className="relative">
-                              <select
-                                value={row.selectedSubstituteName ?? ''}
-                                onChange={(e) => setSelectedSubstitutes((prev) => ({ ...prev, [row.speciesName]: e.target.value }))}
-                                className="text-xs border border-dashed border-red-400 rounded px-2 py-1 pr-6 appearance-none bg-white focus:outline-none focus:border-red-500 min-w-[130px]"
-                              >
-                                <option value="">{row.speciesName} 대체 수종 선택</option>
-                                {row.substituteOptions.map((opt) => (
-                                  <option key={opt.name} value={opt.name}>
-                                    {opt.isAuto ? '▷ ' : ''}{opt.name} ({(opt.rate * 100).toFixed(1)}%){opt.isAuto ? ' *추천' : ''}
-                                  </option>
-                                ))}
-                              </select>
-                              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                            <div className="flex items-center gap-1.5">
+                              <div className="relative">
+                                <select
+                                  value={row.selectedSubstituteName ?? ''}
+                                  disabled={cartStatus === 'confirmed' || isCartPending}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    if (val) handleAddToCart(row.speciesName, val)
+                                    else handleRemoveFromCart(row.speciesName)
+                                  }}
+                                  className="text-xs border border-dashed border-red-400 rounded px-2 py-1 pr-6 appearance-none bg-white focus:outline-none focus:border-red-500 min-w-[130px] disabled:opacity-60"
+                                >
+                                  <option value="">{row.speciesName} 대체 수종 선택</option>
+                                  {row.substituteOptions.map((opt) => (
+                                    <option key={opt.name} value={opt.name}>
+                                      {opt.isAuto ? '▷ ' : ''}{opt.name} ({(opt.rate * 100).toFixed(1)}%){opt.isAuto ? ' *추천' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                              </div>
+                              {row.selectedSubstituteName && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-green-50 text-green-700 border-green-200 whitespace-nowrap">
+                                  담김
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <span className="text-xs text-red-400 px-2 py-1 bg-red-50 rounded border border-red-200">
@@ -1192,6 +1305,24 @@ export function SimulationClient({ sites, substitutions, speciesAvgRate, altRecs
             ※ 개선 하자율은 대체 수종의 기본 하자율을 기반으로 산출됩니다.
           </div>
         </div>
+
+        {/* 대체 결정 장바구니 패널 */}
+        {siteRows.length > 0 && (
+          <CartPanel
+            items={optimisticItems}
+            status={cartStatus}
+            pending={isCartPending}
+            subMap={subMap}
+            originalWeightedRate={originalWeightedRate}
+            improvedWeightedRate={improvedWeightedRate}
+            reductionEffect={reductionEffect}
+            costReduction={costReduction}
+            onReplace={handleAddToCart}
+            onRemove={handleRemoveFromCart}
+            onClear={handleClearCart}
+            onConfirm={handleConfirmCart}
+          />
+        )}
       </div>
     </div>
   )
