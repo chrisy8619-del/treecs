@@ -1,4 +1,20 @@
 'use server'
+/**
+ * 엑셀 데이터 일괄 업로드 서버 액션(식재/점검/하자율예측 3종).
+ *
+ * 호출 주체 : settings/upload-tab.tsx(설정>업로드 탭). 클라이언트가 xlsx로 파싱한
+ *             행 배열을 배치 단위로 이 액션들에 전달한다.
+ * 반환/전송 : sites·species·contractors·spec_codes·planting_records·inspection_items·
+ *             upload_logs 테이블에 insert/upsert. 완료 후 관련 화면을 revalidate.
+ *             - uploadPlantingRecords : revalidatePath('/plantings','/settings')
+ *             - uploadInspectionResults: revalidatePath('/inspections','/settings')
+ *             - uploadDefectAnalysisBatch: revalidatePath('/analytics','/plantings','/settings','/dashboard')
+ *             반환은 UploadResult({ successCount, failCount, errors[] }).
+ * 의존성   : @/lib/supabase/server, @/lib/season-utils, ./upload-types(공유 타입)
+ * 데이터흐름: upload-tab(클라 파싱) → 배치 호출 → 이 액션(재검증+insert) → revalidate
+ *
+ * excelDateToString 등 동기 헬퍼는 'use server' 제약상 export 불가(비-export 유지).
+ */
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'

@@ -1,4 +1,16 @@
 'use server'
+/**
+ * 시뮬레이터 장바구니(대체수종 선택) 서버 액션.
+ *
+ * 호출 주체 : simulation-client.tsx (담기·일괄담기·삭제·비우기·확정 버튼)
+ * 반환/전송 : cart_sessions·cart_items 테이블 write. 모든 변경 액션은
+ *             성공 시 revalidatePath('/simulation')로 최신 카트를 재렌더한다.
+ *             반환은 CartActionResult({ success, cart?, error? }).
+ * 의존성   : @/lib/supabase/server(서버 클라이언트), ./cart-types(공유 타입)
+ * 데이터흐름: simulation-client → upsertCartItem/confirmCart 등 → Supabase → revalidate('/simulation')
+ *
+ * 내부 헬퍼(resolveOrg/resolveSpeciesId 등)는 'use server' 제약상 비-export.
+ */
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'

@@ -1,8 +1,21 @@
 'use server'
+/**
+ * 인증 서버 액션(로그인/가입/로그아웃).
+ *
+ * 호출 주체 : login 폼(app/(auth)/login), signup 폼(app/(auth)/signup),
+ *             헤더/사이드바의 로그아웃 버튼.
+ * 반환/전송 : Supabase Auth(signInWithPassword/signUp/signOut) 호출 + profiles 조회·갱신.
+ *             폼 액션은 useActionState용 { error } 반환 또는 redirect로 이동:
+ *             - login  : 승인 상태에 따라 /auth/pending 또는 /simulation
+ *             - signup : /auth/pending (관리자 승인 대기)
+ *             - logout : /login
+ * 의존성   : @/lib/supabase/server, next/navigation(redirect)
+ */
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
+/** 로그인. 승인대기/비활성/삭제 계정은 로그아웃 후 안내. 성공 시 /simulation으로 이동. */
 export async function login(state: { error: string }, formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
@@ -44,6 +57,7 @@ export async function login(state: { error: string }, formData: FormData) {
   redirect('/simulation')
 }
 
+/** 회원가입. 필수값·비밀번호(8자↑, 일치) 검증 후 signUp. 가입 즉시 로그아웃하고 승인 대기(/auth/pending). */
 export async function signup(state: { error: string }, formData: FormData) {
   const name = formData.get('name') as string
   const email = formData.get('email') as string
@@ -88,6 +102,7 @@ export async function signup(state: { error: string }, formData: FormData) {
   redirect('/auth/pending')
 }
 
+/** 로그아웃. 세션 종료 후 /login으로 이동. */
 export async function logout() {
   const supabase = await createClient()
   await supabase.auth.signOut()

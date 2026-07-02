@@ -1,4 +1,14 @@
 'use server'
+/**
+ * 대체수종 매핑표(엑셀) 업로드 서버 액션.
+ *
+ * 호출 주체 : simulation-client.tsx(시뮬레이터 대체수종 맵 업로드).
+ * 반환/전송 : species·species_substitutions 테이블에 upsert(원수종→대체수종 매핑,
+ *             개선 하자율 포함). 성공 시 revalidatePath('/simulation').
+ *             반환은 SubstitutionUploadResult({ success, successCount, failCount, errors[] }).
+ * 의존성   : @/lib/supabase/server, xlsx
+ * 데이터흐름: simulation-client(파일 base64) → uploadSubstitutions → Supabase → revalidate('/simulation')
+ */
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
