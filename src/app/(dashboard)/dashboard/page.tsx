@@ -10,7 +10,8 @@
  */
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { DashboardClient, type SiteOption, type PlantingRow } from './dashboard-client'
+import { DashboardClient } from './dashboard-client'
+import type { SiteOption } from './dashboard-types'
 
 export const dynamic = 'force-dynamic'
 

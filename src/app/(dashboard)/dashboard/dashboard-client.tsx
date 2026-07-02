@@ -30,38 +30,8 @@ import { type DefectAnalysisRow } from '@/app/actions/upload-types'
 import { BATCH_SIZE } from '@/lib/upload-config'
 
 // ─── 타입 ────────────────────────────────────────────────
-export type SiteOption = {
-  id: string
-  site_name: string
-  site_code: string
-  region: string | null
-  occupancy_date: string | null
-  start_date: string | null
-  org_name: string | null
-}
-
-export type PlantingRow = {
-  id: string
-  site_id: string
-  quantity_planted: number
-  unit_price: number | null
-  expected_defect_rate: number | null
-  expected_defect_qty: number | null
-  expected_reserve_cost: number | null
-  risk_level: string | null
-  planting_season: string | null
-  notes: string | null
-  contractor_name: string | null
-  species_name: string | null
-  height_m: number | null
-  width_m: number | null
-  rootball_r: number | null
-  caliper: number | null
-  // API 응답 원본 (조인 필드)
-  contractors?: { contractor_name: string } | { contractor_name: string }[] | null
-  species?: { species_name_ko: string } | { species_name_ko: string }[] | null
-  spec_codes?: { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number } | { height_m?: number; width_m?: number; rootball_r?: number; caliper?: number }[] | null
-}
+// 공유 타입은 dashboard-types.ts에서 관리 (page.tsx와 공유)
+import type { SiteOption, PlantingRow } from './dashboard-types'
 
 type Props = {
   sites: SiteOption[]

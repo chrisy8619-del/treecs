@@ -36,44 +36,8 @@ import { getRecommendedSubstitutes, mapRegion } from '@/lib/species-knowledge'
 import { ruleBasedRecommender, getSpeciesRiskFromRate } from '@/lib/substitute-recommender'
 import { CartPanel } from './cart-panel'
 
-export type SiteOption = {
-  id: string
-  site_name: string
-  site_code: string
-  region: string | null
-  occupancy_date: string | null
-  org_name: string | null
-}
-
-export type PlantingRow = {
-  id: string
-  species_name: string | null
-  quantity_planted: number
-  unit_price: number | null
-  expected_defect_rate: number | null
-  expected_defect_qty: number | null
-  expected_reserve_cost: number | null
-  risk_level: string | null
-  planting_season: string | null
-  planting_date: string | null
-  contractor_name: string | null
-  notes: string | null
-}
-
-export type SubstitutionMap = {
-  original_species_name: string
-  substitute_species_name: string
-  improved_defect_rate: number
-}
-
-export type AltSpeciesRec = {
-  species_name: string
-  region: string
-  season: string
-  substitute1: string | null
-  substitute2: string | null
-  substitute3: string | null
-}
+// 공유 타입은 simulation-types.ts에서 관리 (page.tsx·dashboard-tabs-client와 공유)
+import type { SiteOption, PlantingRow, SubstitutionMap, AltSpeciesRec } from './simulation-types'
 
 type Props = {
   sites: SiteOption[]
