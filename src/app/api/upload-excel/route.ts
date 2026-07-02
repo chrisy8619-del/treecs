@@ -9,13 +9,14 @@
  *             응답: { successCount, failCount, errors[] }.
  * 의존성   : @/lib/supabase/server, @/lib/season-utils
  *
- * 주의: safeNum/parseUnitPrice/excelDateToString이 actions/upload.ts와 중복 구현되어 있음
- *       (배치 API 분리 시점의 복제). 공용 모듈 추출 시 함께 정리할 것.
+ * 주의: excelDateToString은 @/lib/excel-date 공용 모듈 사용(중복 제거 완료).
+ *       safeNum/parseUnitPrice는 actions/upload.ts와 아직 중복 — 추후 정리 후보.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { SEASON_KO_TO_CODE, defectSeasonToPlantingSeason, resolveSeasonCode } from '@/lib/season-utils'
+import { excelDateToString } from '@/lib/excel-date'
 
 export const maxDuration = 60
 
@@ -40,37 +41,6 @@ function toSiteCode(siteName: string): string {
   return `SITE_${siteName.replace(/\s+/g, '_').slice(0, 20)}`
 }
 
-function excelDateToString(val: unknown): string | null {
-  if (val == null || val === '') return null
-  if (typeof val === 'string') {
-    const s = val.trim()
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, '-')
-    if (/^\d{4}\.\d{2}\.\d{2}$/.test(s)) return s.replace(/\./g, '-')
-    if (/^\d{4}[./]\d{2}$/.test(s)) {
-      const [y, m] = s.split(/[./]/)
-      return `${y}-${m.padStart(2, '0')}-01`
-    }
-    const ym = s.match(/^(\d{4})년\s*(\d{1,2})월/)
-    if (ym) return `${ym[1]}-${ym[2].padStart(2, '0')}-01`
-    if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`
-    const d = new Date(s)
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-    return null
-  }
-  if (typeof val === 'number') {
-    if (val > 1900 && val < 2200 && String(val).includes('.')) {
-      const [y, m] = String(val).split('.')
-      return `${y}-${m.padStart(2, '0')}-01`
-    }
-    if (val > 25569) {
-      const ms = (val - 25569) * 86400 * 1000
-      const d = new Date(ms)
-      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-    }
-  }
-  return null
-}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()

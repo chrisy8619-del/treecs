@@ -13,12 +13,14 @@
  * 의존성   : @/lib/supabase/server, @/lib/season-utils, ./upload-types(공유 타입)
  * 데이터흐름: upload-tab(클라 파싱) → 배치 호출 → 이 액션(재검증+insert) → revalidate
  *
- * excelDateToString 등 동기 헬퍼는 'use server' 제약상 export 불가(비-export 유지).
+ * 동기 헬퍼는 'use server' 제약상 이 파일에서 export 불가 → excelDateToString은
+ * @/lib/excel-date로 분리(공용). 내부 전용 헬퍼는 비-export 유지.
  */
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { SEASON_KO_TO_CODE, defectSeasonToPlantingSeason } from '@/lib/season-utils'
+import { excelDateToString } from '@/lib/excel-date'
 import { BATCH_SIZE } from '@/lib/upload-config'
 import * as XLSX from 'xlsx'
 import type { UploadResult, DefectAnalysisRow } from './upload-types'
@@ -46,52 +48,6 @@ type InspectionRow = {
   비고?: string
 }
 
-// 엑셀 날짜 → YYYY-MM-DD 변환 (모든 입력 형식을 일관되게 처리)
-// 지원 형식: YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD, YYYY.MM, YYYY년 MM월, 엑셀 시리얼
-function excelDateToString(val: unknown): string | null {
-  if (val == null || val === '') return null
-
-  if (typeof val === 'string') {
-    const s = val.trim()
-    if (!s) return null
-    // YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-    // YYYY/MM/DD
-    if (/^\d{4}\/\d{2}\/\d{2}$/.test(s)) return s.replace(/\//g, '-')
-    // YYYY.MM.DD
-    if (/^\d{4}\.\d{2}\.\d{2}$/.test(s)) return s.replace(/\./g, '-')
-    // YYYY.MM 또는 YYYY/MM (연월만)
-    if (/^\d{4}[./]\d{2}$/.test(s)) {
-      const [y, m] = s.split(/[./]/)
-      return `${y}-${m.padStart(2, '0')}-01`
-    }
-    // YYYY년 MM월 또는 YYYY년MM월
-    const yearMonth = s.match(/^(\d{4})년\s*(\d{1,2})월/)
-    if (yearMonth) return `${yearMonth[1]}-${yearMonth[2].padStart(2, '0')}-01`
-    // YYYY-MM (연월만)
-    if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`
-    // 그 외 문자열 → Date 파싱
-    const d = new Date(s)
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-    return null
-  }
-
-  if (typeof val === 'number') {
-    // YYYY.MM 숫자 형태 (예: 2022.12)
-    if (val > 1900 && val < 2200 && String(val).includes('.')) {
-      const [y, m] = String(val).split('.')
-      return `${y}-${m.padStart(2, '0')}-01`
-    }
-    // 엑셀 날짜 시리얼 (1900.01.01 기준)
-    if (val > 25569) {
-      const ms = (val - 25569) * 86400 * 1000
-      const d = new Date(ms)
-      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-    }
-  }
-
-  return null
-}
 
 
 export async function uploadPlantingRecords(rows: PlantingRow[]): Promise<UploadResult> {
