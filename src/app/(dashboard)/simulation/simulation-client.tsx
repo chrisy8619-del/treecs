@@ -1,4 +1,19 @@
 'use client'
+/**
+ * 시뮬레이터 메인 클라이언트 컴포넌트(현장 선택 → 식재목록 → 대체수종 추천/담기 → 비교).
+ *
+ * 호출 주체 : dashboard-tabs-client.tsx(시뮬레이터 탭). 데이터는 simulation/page.tsx SSR이
+ *             props(sites/substitutions/speciesAvgRate/altRecs)로 주입.
+ * 반환/전송 : - 담기/삭제/확정 → actions/cart.ts(upsertCartItem·removeCartItem·clearCart·
+ *               confirmCart·bulkUpsertCartItems) 호출 → revalidate('/simulation')
+ *             - 대체수종 맵 엑셀 업로드 → actions/substitution.ts(uploadSubstitutions)
+ *             - 현장 선택 시 /api/plantings-by-site·/api/cart-by-site fetch로 지연 조회
+ * 의존성   : @/lib/substitute-recommender(ruleBasedRecommender: DB맵→지역계절표→저위험 폴백),
+ *             @/lib/species-knowledge, @/lib/season-utils, ./cart-panel(CartPanel)
+ * 데이터흐름: page.tsx SSR → [이 파일: 추천 계산·표 렌더·담기 UI] → cart 액션 → revalidate
+ *
+ * 주의: 하자율 표시는 SSR에서 이미 보정된 값(expected_defect_rate)을 사용. 여기서 재계산하지 않음.
+ */
 
 import { useState, useMemo, useCallback, useRef, useEffect, useOptimistic, useTransition } from 'react'
 import Image from 'next/image'

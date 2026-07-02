@@ -1,3 +1,13 @@
+/**
+ * 대시보드 화면의 SSR 진입점(서버 컴포넌트).
+ *
+ * 호출 주체 : /dashboard 라우트 진입 시 Next.js가 렌더. force-dynamic.
+ * 반환/전송 : 미인증 시 /login redirect. 승인된(active/closed) 현장 목록만 조회해
+ *             SiteOption[]으로 변환 후 DashboardClient에 props로 전달.
+ *             (식재/하자 데이터는 클라이언트가 현장 선택 시 별도 조회)
+ * 의존성   : @/lib/supabase/server, ./dashboard-client
+ * 데이터흐름: [이 파일: sites 조회] → DashboardClient → (현장 선택) 상세 데이터 fetch
+ */
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardClient, type SiteOption, type PlantingRow } from './dashboard-client'

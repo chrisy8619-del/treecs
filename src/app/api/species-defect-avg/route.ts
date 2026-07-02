@@ -1,3 +1,12 @@
+/**
+ * 수종별 평균 하자율(원시율) 집계 API. GET /api/species-defect-avg
+ *
+ * 호출 주체 : ⚠️ 현재 src 내 fetch 호출처 없음 — simulation/page.tsx가 SSR에서
+ *             동일 집계를 Supabase 직접 쿼리로 수행하도록 대체된 것으로 보임.
+ *             외부/과거 호환용으로 유지 중. 정리(삭제) 검토 후보.
+ * 반환/전송 : { [species_name_ko]: rate } JSON. 미인증 401, 실패 500.
+ * 의존성   : @/lib/supabase/server
+ */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 

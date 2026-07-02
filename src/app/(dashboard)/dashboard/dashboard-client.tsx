@@ -1,4 +1,16 @@
 'use client'
+/**
+ * 대시보드 메인 클라이언트 컴포넌트(현장 선택 → 식재/하자 현황 표 + 하자분석 엑셀 업로드).
+ *
+ * 호출 주체 : dashboard/page.tsx가 sites(승인된 현장 목록)를 props로 넘겨 렌더.
+ * 반환/전송 : - 현장 선택 시 /api/plantings-by-site fetch로 식재목록 지연 조회
+ *             - 하자분석 엑셀 업로드 → 클라이언트에서 xlsx 파싱(parseDefectSheet) 후
+ *               /api/upload-excel POST로 배치 전송(BATCH_SIZE 단위)
+ * 의존성   : @/app/actions/upload-types(DefectAnalysisRow), @/lib/upload-config(BATCH_SIZE), xlsx
+ * 데이터흐름: page.tsx(sites) → [이 파일: 조회·필터·표 렌더 + 엑셀 파싱·배치 업로드] → API
+ *
+ * 주의: parseDefectSheet의 컬럼 매핑은 업로드 양식과 결합. 양식 변경 시 함께 수정할 것.
+ */
 
 import { useState, useMemo, useRef, useTransition, useEffect } from 'react'
 import * as XLSX from 'xlsx'

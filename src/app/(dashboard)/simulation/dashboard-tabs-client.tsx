@@ -1,4 +1,15 @@
 'use client'
+/**
+ * /simulation 화면의 탭 컨테이너(요약/대시보드/시뮬레이터 3탭 전환).
+ *
+ * 호출 주체 : simulation/page.tsx가 SSR 데이터 전체를 props로 넘겨 렌더.
+ * 반환/전송 : 탭 상태만 관리하고 데이터를 각 탭 컴포넌트에 그대로 분배:
+ *             - 요약     → SummaryContent(analytics + speciesImprovedRate)
+ *             - 대시보드 → AnalyticsContent(analytics)
+ *             - 시뮬레이터 → SimulationClient(sites/substitutions/speciesAvgRate/altRecs)
+ * 의존성   : ./simulation-client, ./analytics-content, ./summary-content
+ * 데이터흐름: page.tsx SSR → [이 파일: 탭 분배] → 각 탭 컴포넌트
+ */
 
 import { useState } from 'react'
 import Image from 'next/image'

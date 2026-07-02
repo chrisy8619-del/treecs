@@ -1,3 +1,17 @@
+/**
+ * 하자율 예측 분석 엑셀 배치 업로드 API. POST /api/upload-excel (form: rows JSON + isLast)
+ *
+ * 호출 주체 : dashboard-client.tsx, settings/upload-tab.tsx — 클라이언트에서 xlsx 파싱한
+ *             행 배열을 BATCH_SIZE 단위로 반복 POST.
+ * 반환/전송 : sites/contractors/species/spec_codes 자동 생성 + planting_records insert +
+ *             upload_logs 기록. 마지막 배치(isLast)에서만
+ *             revalidatePath('/analytics','/plantings','/settings','/dashboard').
+ *             응답: { successCount, failCount, errors[] }.
+ * 의존성   : @/lib/supabase/server, @/lib/season-utils
+ *
+ * 주의: safeNum/parseUnitPrice/excelDateToString이 actions/upload.ts와 중복 구현되어 있음
+ *       (배치 API 분리 시점의 복제). 공용 모듈 추출 시 함께 정리할 것.
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'

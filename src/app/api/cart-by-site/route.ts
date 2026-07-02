@@ -1,11 +1,16 @@
+/**
+ * 현장별 활성(draft) 장바구니 조회 API. GET /api/cart-by-site?site_id=...
+ *
+ * 호출 주체 : simulation-client.tsx (현장 선택 시 기존 담기 내역 복원용 지연 조회)
+ * 반환/전송 : { cart: Cart | null } JSON — substitution_carts(draft) + 항목 배열.
+ *             카트 없으면 { cart: null } (생성은 담기 시점에 actions/cart.ts가 수행).
+ * 의존성   : @/lib/supabase/server, @/app/actions/cart-types
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { Cart, CartItem } from '@/app/actions/cart-types'
 
 export const dynamic = 'force-dynamic'
-
-// 현장의 활성(draft) 장바구니 + 항목 조회.
-// 카트가 없으면 빈 카트(null)를 반환한다(생성은 담기 시점에 서버액션이 수행).
 export async function GET(req: NextRequest) {
   const siteId = req.nextUrl.searchParams.get('site_id')
   if (!siteId) return NextResponse.json({ cart: null }, { status: 400 })

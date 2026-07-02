@@ -1,3 +1,16 @@
+/**
+ * 시뮬레이터 화면의 SSR 진입점(서버 컴포넌트). 모든 시뮬레이터 데이터의 원천.
+ *
+ * 호출 주체 : /simulation 라우트 진입 시 Next.js가 렌더. force-dynamic(항상 서버 렌더).
+ * 반환/전송 : 미인증 시 /login redirect. 인증 시 Supabase 4개 쿼리를 병렬 실행
+ *             (sites / species_substitutions / 수종별 평균하자율 / alternative_species_recommendations),
+ *             보정·정렬·매핑 후 props로 DashboardTabsClient에 전달('use client' 경계).
+ * 의존성   : @/lib/supabase/server, @/lib/defect-rate(adjustedRate·isLowSample),
+ *             @/lib/season-utils, @/lib/region-utils, ./dashboard-tabs-client
+ * 데이터흐름: [이 파일 SSR 쿼리·집계] → DashboardTabsClient → SimulationClient → (담기) actions/cart.ts
+ *
+ * 주의: 하자율은 adjustedRate(베이지안 보정)로 통일. 이 계산식은 회귀 기준이므로 변경 금지.
+ */
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { promises as fs } from 'fs'
